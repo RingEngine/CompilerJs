@@ -21,7 +21,6 @@ test('compiler CLI checks source, compiles, packs directories into rfp, lists, a
   const sourcePackagePath = path.join(tempRoot, 'filter-source.rfp');
   const privateKeyPath = path.join(tempRoot, 'private.pem');
   const publicKeyPath = path.join(tempRoot, 'public.pem');
-  const sampleSourceDirectory = path.resolve('..', '..', 'filter-samples', 'hdr-luminance-remap');
 
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -29,7 +28,7 @@ test('compiler CLI checks source, compiles, packs directories into rfp, lists, a
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
   });
 
-  await copyDirectory(sampleSourceDirectory, sourceDirectory);
+  await writeSampleFilterSource(sourceDirectory);
   await fs.writeFile(privateKeyPath, privateKey, 'utf8');
   await fs.writeFile(publicKeyPath, publicKey, 'utf8');
 
@@ -129,21 +128,60 @@ test('compiler CLI checks source, compiles, packs directories into rfp, lists, a
   }
 });
 
-async function copyDirectory(sourceDirectory, targetDirectory) {
-  await fs.mkdir(targetDirectory, { recursive: true });
-  const entries = await fs.readdir(sourceDirectory, { withFileTypes: true });
+async function writeSampleFilterSource(targetDirectory) {
+  await fs.mkdir(path.join(targetDirectory, 'shaders'), { recursive: true });
 
-  for (const entry of entries) {
-    const sourcePath = path.join(sourceDirectory, entry.name);
-    const targetPath = path.join(targetDirectory, entry.name);
+  await fs.writeFile(path.join(targetDirectory, 'manifest.json'), JSON.stringify({
+    schemaVersion: '1.0.0',
+    runtimeVersion: 1,
+    metadata: {
+      kind: 'filter-src',
+      id: 'com.example.cli-test',
+      name: 'CLI Test Filter',
+      version: '1.0.0'
+    },
+    passes: [
+      {
+        id: 'tone',
+        type: 'render',
+        vertexShader: 'shaders/fullscreen.vert.glsl',
+        fragmentShader: 'shaders/tone.frag.glsl'
+      }
+    ]
+  }, null, 2));
 
-    if (entry.isDirectory()) {
-      await copyDirectory(sourcePath, targetPath);
-      continue;
-    }
+  await fs.writeFile(path.join(targetDirectory, 'main.lua'), `function onReset(ctx)
+end
 
-    await fs.copyFile(sourcePath, targetPath);
-  }
+function advance(ctx)
+  ctx:runRenderPass("tone", {
+    source = ctx:getInput()
+  }, ctx:getOutput())
+end
+`);
+
+  await fs.writeFile(path.join(targetDirectory, 'shaders', 'fullscreen.vert.glsl'), `#version 450
+
+layout(location = 0) in vec2 a_position;
+layout(location = 0) out vec2 v_uv;
+
+void main() {
+  v_uv = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`);
+
+  await fs.writeFile(path.join(targetDirectory, 'shaders', 'tone.frag.glsl'), `#version 450
+
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 outColor;
+
+layout(set = 0, binding = 0) uniform sampler2D source;
+
+void main() {
+  outColor = texture(source, v_uv);
+}
+`);
 }
 
 async function execCli(args) {

@@ -1,12 +1,34 @@
 {
-  "name": "@ring-engine/filter-cli",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@ring-engine-org/filter-cli",
+  "version": "0.1.1",
   "type": "module",
+  "description": "Ring Filter Compiler CLI for checking, compiling, packing, listing, and unpacking filter projects.",
+  "files": [
+    "src"
+  ],
   "bin": {
     "rfc2": "./src/main.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RingEngine/CompilerJs",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/RingEngine/CompilerJs/issues"
+  },
+  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/cli",
+  "dependencies": {
+    "@ring-engine-org/filter-compiler-core": "0.1.1",
+    "@ring-engine-org/filter-packer": "0.1.1"
   }
 }

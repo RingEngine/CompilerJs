@@ -2,10 +2,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { FilterCompilerError, compileFilterSourceFiles, validateFilterSource } from '../../core/src/index.js';
-import { createNodeShaderCompiler } from '../../core/src/glslang-node.js';
-import { readFilterSourceDirectory } from '../../core/src/node.js';
-import { listFilterPackage, packFilterPackage, unpackFilterPackage, MAGIC } from '../../packer/src/index.js';
+import { FilterCompilerError, compileFilterSourceFiles, validateFilterSource } from '@ring-engine-org/filter-compiler-core';
+import { createNodeShaderCompiler } from '@ring-engine-org/filter-compiler-core/glslang-node';
+import { readFilterSourceDirectory } from '@ring-engine-org/filter-compiler-core/node';
+import { listFilterPackage, packFilterPackage, unpackFilterPackage, MAGIC } from '@ring-engine-org/filter-packer';
 import { readZipArchive } from './zip.js';
 import { readDirectoryAsFileMap, resolveInputValue, writeFileMapToDirectory } from './io.js';
 

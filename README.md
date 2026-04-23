@@ -361,6 +361,49 @@ npm --prefix ./packer test
 npm --prefix ./cli test
 ```
 
+发布前检查：
+
+```powershell
+npm run release:check
+```
+
+## npm 包与发布
+
+当前工作区会发布这三个 npm 包：
+
+- `@ring-engine-org/filter-compiler-core`
+- `@ring-engine-org/filter-packer`
+- `@ring-engine-org/filter-cli`
+
+其中：
+
+- `@ring-engine-org/filter-cli` 对外提供 `rfc2`
+- `@ring-engine-org/filter-cli` 依赖 `@ring-engine-org/filter-compiler-core`
+- `@ring-engine-org/filter-cli` 依赖 `@ring-engine-org/filter-packer`
+
+CI 位于：
+
+- `.github/workflows/ci.yml`
+
+tag 驱动的发布工作流位于：
+
+- `.github/workflows/publish.yml`
+
+当前约定：
+
+- PR 会触发 CI：
+  - 运行测试
+  - 生成临时预览 tarball
+  - 预览版本格式为 `0.0.0-pr.<pr号>.<run号>`
+  - 产物以 GitHub Actions artifact 形式上传
+- 推送 `v0.0.0` 这类 tag 时会触发正式发布流程
+- 正式发布要求：
+  - tag commit 必须位于 `master`
+  - tag 必须匹配 `v0.0.0` 格式
+  - `core` / `packer` / `cli` 的 `package.json.version` 必须与 tag 去掉前导 `v` 后一致
+- 发布前会先执行测试和 `npm pack --dry-run`
+- GitHub Actions 需要配置 `NPM_TOKEN`
+
 ## 当前边界
 
 当前工作区的边界如下：

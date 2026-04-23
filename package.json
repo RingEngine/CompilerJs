@@ -1,13 +1,26 @@
 {
-  "name": "@ring-engine/compiler-js",
+  "name": "@ring-engine-org/compiler-js",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.12.1",
   "workspaces": [
     "core",
     "packer",
     "cli"
   ],
   "scripts": {
-    "test": "npm --prefix ./core test && npm --prefix ./packer test && npm --prefix ./cli test"
-  }
+    "test": "npm --prefix ./core test && npm --prefix ./packer test && npm --prefix ./cli test",
+    "pack:dry-run": "npm pack --workspace ./core --dry-run && npm pack --workspace ./packer --dry-run && npm pack --workspace ./cli --dry-run",
+    "release:check": "npm test && npm run pack:dry-run",
+    "release:validate-tag": "node ./scripts/validate-release-tag.mjs",
+    "pr:prepare-packages": "node ./scripts/prepare-pr-packages.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RingEngine/CompilerJs"
+  },
+  "bugs": {
+    "url": "https://github.com/RingEngine/CompilerJs/issues"
+  },
+  "homepage": "https://github.com/RingEngine/CompilerJs#readme"
 }

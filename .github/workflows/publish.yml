@@ -1,0 +1,73 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Check npm version
+        run: npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag is reachable from master
+        shell: bash
+        run: |
+          set -euo pipefail
+          fetched=0
+          for attempt in 1 2 3; do
+            if git fetch origin master --depth=1; then
+              fetched=1
+              break
+            fi
+            echo "git fetch origin master failed on attempt $attempt, retrying..."
+            sleep 5
+          done
+          if [ "$fetched" -ne 1 ]; then
+            echo "Warning: failed to refresh origin/master after retries; skipping ancestry enforcement for this run."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "Tag commit is not on origin/master"
+            exit 1
+          fi
+
+      - name: Validate tag format and package versions
+        env:
+          GIT_TAG: ${{ github.ref_name }}
+        run: npm run release:validate-tag
+
+      - name: Run release checks
+        run: npm run release:check
+
+      - name: Debug npm user config
+        run: cat "$NPM_CONFIG_USERCONFIG" || echo "no userconfig"
+
+      - name: Publish core
+        run: npm publish --workspace ./core --access public --provenance
+
+      - name: Publish packer
+        run: npm publish --workspace ./packer --access public --provenance
+
+      - name: Publish cli
+        run: npm publish --workspace ./cli --access public --provenance

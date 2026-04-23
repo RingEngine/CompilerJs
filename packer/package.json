@@ -1,11 +1,32 @@
 {
-  "name": "@ring-engine/filter-packer",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@ring-engine-org/filter-packer",
+  "version": "0.1.1",
   "type": "module",
+  "description": "Ring Engine filter package packer for creating and reading .rfp files.",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/index.js"
+  },
   "scripts": {
     "test": "node --test test/*.test.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RingEngine/CompilerJs",
+    "directory": "packer"
+  },
+  "bugs": {
+    "url": "https://github.com/RingEngine/CompilerJs/issues"
+  },
+  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/packer",
   "dependencies": {
     "pako": "^2.1.0"
   }

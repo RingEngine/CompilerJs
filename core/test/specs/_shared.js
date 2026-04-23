@@ -1,22 +1,10 @@
 import test from 'node:test';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { FILTER_SCHEMA_URL, FILTER_SRC_SCHEMA_URL } from '../../src/schema-urls.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = path.resolve(__dirname, '..', '..', '..', '..');
-const docsRoot = path.resolve(workspaceRoot, 'docs', 'schemas');
-
-const filterSrcSchema = JSON.parse(
-  await fs.readFile(path.join(docsRoot, 'filter-src.schema.json'), 'utf8')
-);
-const filterSchema = JSON.parse(
-  await fs.readFile(path.join(docsRoot, 'filter.schema.json'), 'utf8')
-);
-
 const originalFetch = globalThis.fetch;
+const filterSrcSchema = await fetchSchema(FILTER_SRC_SCHEMA_URL);
+const filterSchema = await fetchSchema(FILTER_SCHEMA_URL);
 
 function installSchemaFetchMock() {
   globalThis.fetch = async (url) => {
@@ -45,6 +33,20 @@ function makeJsonResponse(payload) {
       return payload;
     }
   };
+}
+
+async function fetchSchema(url) {
+  const response = await originalFetch(url, {
+    headers: {
+      accept: 'application/schema+json, application/json'
+    }
+  });
+
+  if (!response?.ok) {
+    throw new Error(`Failed to load schema fixture from ${url}: ${response?.status} ${response?.statusText}`);
+  }
+
+  return await response.json();
 }
 
 export function createRenderProject(overrides = {}) {

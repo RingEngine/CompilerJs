@@ -1,12 +1,38 @@
 {
-  "name": "@ring-engine/filter-compiler-core",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@ring-engine-org/filter-compiler-core",
+  "version": "0.1.1",
   "type": "module",
+  "description": "Ring Engine filter compiler core for compiling filter-src projects in Node.js and the browser.",
+  "files": [
+    "src",
+    "vendor"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./glslang-node": "./src/glslang-node.js",
+    "./glslang-web": "./src/glslang-web.js",
+    "./schema-urls": "./src/schema-urls.js"
+  },
   "scripts": {
     "test": "node --test test/specs/*.test.js",
     "generate:glsl-parser": "antlr-ng -Dlanguage=JavaScript --exact-output-dir -o src/generated/glsl vendor/antlr-glsl/GLSLLexer.g4 vendor/antlr-glsl/GLSLParser.g4"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RingEngine/CompilerJs",
+    "directory": "core"
+  },
+  "bugs": {
+    "url": "https://github.com/RingEngine/CompilerJs/issues"
+  },
+  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/core",
   "dependencies": {
     "@webgpu/glslang": "^0.0.15",
     "ajv": "^8.18.0",
