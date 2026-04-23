@@ -60,9 +60,6 @@ jobs:
       - name: Run release checks
         run: npm run release:check
 
-      - name: Debug npm user config
-        run: cat "$NPM_CONFIG_USERCONFIG" || echo "no userconfig"
-
       - name: Publish core
         run: npm publish --workspace ./core --access public --provenance
 
