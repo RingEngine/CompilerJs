@@ -1,0 +1,13 @@
+{
+  "name": "@ring-engine/compiler-js",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "core",
+    "packer",
+    "cli"
+  ],
+  "scripts": {
+    "test": "npm --prefix ./core test && npm --prefix ./packer test && npm --prefix ./cli test"
+  }
+}

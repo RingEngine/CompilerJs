@@ -1,0 +1,20 @@
+{
+  "name": "@ring-engine/filter-compiler-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/specs/*.test.js",
+    "generate:glsl-parser": "antlr-ng -Dlanguage=JavaScript --exact-output-dir -o src/generated/glsl vendor/antlr-glsl/GLSLLexer.g4 vendor/antlr-glsl/GLSLParser.g4"
+  },
+  "dependencies": {
+    "@webgpu/glslang": "^0.0.15",
+    "ajv": "^8.18.0",
+    "antlr4": "^4.13.2",
+    "json-source-map": "^0.6.1",
+    "luaparse": "^0.3.1"
+  },
+  "devDependencies": {
+    "antlr-ng": "^1.0.10"
+  }
+}

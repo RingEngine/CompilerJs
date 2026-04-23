@@ -1,0 +1,12 @@
+{
+  "name": "@ring-engine/filter-packer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "pako": "^2.1.0"
+  }
+}

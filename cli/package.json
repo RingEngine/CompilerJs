@@ -1,0 +1,12 @@
+{
+  "name": "@ring-engine/filter-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rfc2": "./src/main.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
