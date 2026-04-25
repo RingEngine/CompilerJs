@@ -167,6 +167,26 @@ listFilterPackage(packageBytes)
 - `publicKey`：可选，PEM 公钥字符串或已导入密钥对象
 - `files`：逻辑路径到内容的字典
 
+### 当前加解密实现概览
+
+下面这部分描述的是 `packer` 当前实现语义，方便调用方理解输入要求与实际处理流程；正式资源包格式仍以 `Docs` 仓库中的规范文档为准。
+
+- `masterKey` 本质上是任意字节序列
+- 如果传入的是字符串，当前实现会先取它的 UTF-8 编码字节；不会自动按 hex 或 base64 解码
+- `masterKey` 不会直接拿来做 AES 密钥，而是先作为 HKDF 输入材料
+- `packer` 会先生成随机 `salt`，然后使用 `HKDF-SHA-256(masterKey, salt, "ring.filter.package.v1")` 派生出固定长度的 `packageKey`
+- `packageKey` 之后会继续派生出：
+  - `manifestKey`
+  - `manifestNonce`
+  - 每个 entry 各自独立的 `entryKey`
+- `entry list` 会使用 `manifestKey` 做 AES-GCM 加密
+- 每个 entry 的 payload 会先做 `deflateRaw` 压缩，再使用各自的 `entryKey` 和随机 nonce 做 AES-GCM 加密
+- 私钥和公钥不参与内容加密，只用于可选签名校验
+- 私钥输入是 PEM 文本，导入格式是 `PKCS#8`
+- 公钥输入是 PEM 文本，导入格式是 `SPKI`
+- 当前签名算法是 `RSA-PSS + SHA-256`
+- 当前实现中签名区固定为 256 字节，因此实际使用应与 `RSA 2048` 对齐
+
 ## cli
 
 `cli` 是 `compiler-js` 的命令行封装层。
@@ -187,7 +207,20 @@ CLI 交付的命令名是 `rfc2`。
 
 - `cli/src/main.js`
 
-安装工作区依赖后，可以通过以下方式运行：
+如果只是使用已发布的 CLI，可以直接通过 npm 包运行：
+
+```powershell
+npx @ring-engine-org/filter-cli@0.1.1 <command> ...
+```
+
+或者全局安装后使用 `rfc2`：
+
+```powershell
+npm install -g @ring-engine-org/filter-cli@0.1.1
+rfc2 <command> ...
+```
+
+如果是在当前工作区里开发，可以通过以下方式运行：
 
 ```powershell
 npm install
@@ -380,6 +413,7 @@ npm run release:check
 - `@ring-engine-org/filter-cli` 对外提供 `rfc2`
 - `@ring-engine-org/filter-cli` 依赖 `@ring-engine-org/filter-compiler-core`
 - `@ring-engine-org/filter-cli` 依赖 `@ring-engine-org/filter-packer`
+- 当前已成功发布版本是 `0.1.1`
 
 CI 位于：
 
@@ -402,7 +436,9 @@ tag 驱动的发布工作流位于：
   - tag 必须匹配 `v0.0.0` 格式
   - `core` / `packer` / `cli` 的 `package.json.version` 必须与 tag 去掉前导 `v` 后一致
 - 发布前会先执行测试和 `npm pack --dry-run`
-- GitHub Actions 需要配置 `NPM_TOKEN`
+- 正式发布当前使用 `Node 24` 自带的 npm 11
+- 正式发布走纯 npm trusted publishing / OIDC
+- GitHub Actions 不再依赖 `NPM_TOKEN`
 
 ## 当前边界
 
