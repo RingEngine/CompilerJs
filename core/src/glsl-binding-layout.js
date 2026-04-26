@@ -153,11 +153,13 @@ function parseInitDeclaratorDeclaration(context) {
     if (!declared?.name) continue;
 
     if (qualifiers.storage === 'uniform' && qualifiers.layout.binding !== undefined) {
+      const bindingType = classifyLooseUniformType(typeName);
       bindings.push({
         set: qualifiers.layout.set ?? 0,
         binding: qualifiers.layout.binding,
         name: declared.name,
-        type: classifyLooseUniformType(typeName)
+        type: bindingType,
+        valueType: bindingType === 'uniform' ? typeName : undefined
       });
     }
 

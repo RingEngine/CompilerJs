@@ -88,8 +88,17 @@ compiler-js/
 - 通过远程 `filter-src.schema.json` 和 `filter.schema.json` 做 schema 约束
 - 校验 Lua 语法与当前编译器规则
 - 校验 GLSL 语法与当前编译器规则
+- 预处理 GLSL `#include`，并统一生成前置反射信息
+- 对 block ABI 布局做固定化处理：uniform block 使用 `std140`，storage buffer 使用 `std430`
 - 编译 shader
 - 生成最终编译产物内存字典
+
+GLSL block 布局规则：
+
+- 作者没有写 block layout standard 时，`core` 会在送入 backend 前自动注入标准。
+- `uniform` block 必须是 `std140`；显式写成 `std430`、`shared`、`packed`、`scalar` 等会报错。
+- `buffer` storage block 必须是 `std430`；显式写成其他标准会报错。
+- 编译产物 manifest 中的 binding/field 反射来自预处理后的 GLSL 源级 contract；SPIR-V/WGSL backend 只负责产出目标 shader 形式，不再作为 manifest 反射的主来源。
 
 主要入口：
 

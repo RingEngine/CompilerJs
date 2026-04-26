@@ -1,13 +1,7 @@
-import { reflectSpirv } from './spirv-reflect.js';
 import { FILTER_SCHEMA_URL } from './schema-urls.js';
 import { validateCompiledManifestAgainstSchema } from './compiled-manifest-schema.js';
 import { COMPILER_RUNTIME_VERSION } from './compiler-config.js';
-import {
-  parseGlslDeclaredBindings,
-  parseGlslDeclaredVertexInputs,
-  parseGlslSourceInterface,
-  reconcileBindingsWithSource
-} from './glsl-binding-layout.js';
+import { parseGlslSourceInterface } from './glsl-binding-layout.js';
 import { lintLuaScript } from './lua-lint.js';
 import { parseManifestWithPointers, validateManifestAgainstSchema } from './manifest-schema.js';
 
@@ -40,6 +34,7 @@ const DECLARED_UNIFORM_FIELD_TYPES = new Set([
  * @typedef {{ path: string, text?: string, bytes?: Uint8Array, mediaType?: string }} MemoryFile
  * @typedef {{ severity: 'error'|'warning', code: string, message: string, path?: string, line?: number, column?: number }} Diagnostic
  * @typedef {Record<string, string|Uint8Array>} VirtualFileMap
+ * @typedef {'spirv'|'web-preview'} CompilerBackend
  * @typedef {{ ok: boolean, files: VirtualFileMap, diagnostics: Diagnostic[] }} CompileResult
  * @typedef {{ compileGLSL(source: string, stage: 'vertex'|'fragment'|'compute', options?: { debug?: boolean, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }): Promise<Uint32Array>|Uint32Array }} ShaderCompiler
  */
@@ -93,7 +88,7 @@ export function normalizeMemoryFiles(input) {
  * Compile a virtual `filter-src` file map into a virtual output file map.
  *
  * @param {Record<string, string|Uint8Array|MemoryFile>|MemoryFile[]} input
- * @param {{ sourceName?: string, compiler: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
+ * @param {{ sourceName?: string, backend?: CompilerBackend, compiler?: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
  * @returns {Promise<VirtualFileMap>}
  */
 export async function compileFilterSourceFiles(input, options) {
@@ -106,12 +101,16 @@ export async function compileFilterSourceFiles(input, options) {
  * warnings discovered during the full compile/reflection pipeline.
  *
  * @param {Record<string, string|Uint8Array|MemoryFile>|MemoryFile[]} input
- * @param {{ sourceName?: string, compiler: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
+ * @param {{ sourceName?: string, backend?: CompilerBackend, compiler?: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
  * @returns {Promise<CompileResult>}
  */
 export async function compileFilterSourceFilesWithDiagnostics(input, options) {
-  if (!options || !options.compiler) {
-    throw new Error('compileFilterSourceFiles requires options.compiler.');
+  const backend = options?.backend ?? 'spirv';
+  if (backend !== 'spirv' && backend !== 'web-preview') {
+    throw new Error(`Unsupported compiler backend: ${backend}`);
+  }
+  if (backend === 'spirv' && (!options || !options.compiler)) {
+    throw new Error('compileFilterSourceFiles requires options.compiler for the spirv backend.');
   }
 
   const sourceName = options.sourceName ?? 'filter-src';
@@ -151,6 +150,7 @@ export async function compileFilterSourceFilesWithDiagnostics(input, options) {
       mainLuaText,
       sourceFiles,
       sourceName,
+      backend,
       options.compiler,
       options.spirvVersion ?? '1.0'
     );
@@ -225,7 +225,7 @@ export async function validateFilterSource(input) {
 /**
  * @deprecated Use compileFilterSourceFiles for the real core boundary.
  * @param {Record<string, string|Uint8Array|MemoryFile>|MemoryFile[]} input
- * @param {{ sourceName?: string, compiler: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
+ * @param {{ sourceName?: string, backend?: CompilerBackend, compiler?: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
  */
 export async function compileFilterSource(input, options) {
   const { files, diagnostics } = await compileFilterSourceFilesWithDiagnostics(input, options);
@@ -420,17 +420,27 @@ function validateShaderInterfaces(passes, sourceFiles, diagnostics) {
     for (const [field, shaderPath] of shaderEntries) {
       if (typeof shaderPath !== 'string') continue;
       const normalizedPath = normalizeRelativePath(shaderPath);
-      const source = sourceFiles[normalizedPath];
-      if (typeof source !== 'string') continue;
+      let preprocessed;
+      try {
+        preprocessed = preprocessShaderSource(normalizedPath, sourceFiles);
+      } catch (error) {
+        if (error instanceof FilterCompilerError) {
+          diagnostics.push(...error.diagnostics);
+          continue;
+        }
+        throw error;
+      }
 
-      const parsed = parseGlslSourceInterface(source);
+      const parsed = parseGlslSourceInterface(preprocessed.source);
+      diagnostics.push(...mapPreprocessDiagnostics(preprocessed.diagnostics, preprocessed.sourceMap, normalizedPath));
       for (const item of parsed.diagnostics) {
+        const sourceLocation = item.line ? preprocessed.sourceMap?.[item.line - 1] : null;
         diagnostics.push({
           severity: 'error',
           code: item.code,
           message: `${item.message} (${field} in pass "${pass.id ?? index}")`,
-          path: normalizedPath,
-          line: item.line,
+          path: sourceLocation?.path ?? normalizedPath,
+          line: sourceLocation?.line ?? item.line,
           column: item.column
         });
       }
@@ -502,7 +512,7 @@ function normalizeSourceManifest(manifest) {
   };
 }
 
-async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceName, compiler, spirvVersion) {
+async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceName, backend, compiler, spirvVersion) {
   const files = {};
   const diagnostics = [];
   const shaderArtifacts = new Map();
@@ -524,7 +534,7 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
   files['main.lua'] = mainLuaText;
 
   for (const pass of manifest.passes) {
-    const compiledPass = await compilePass(pass, sourceFiles, compiler, spirvVersion, shaderArtifacts);
+    const compiledPass = await compilePass(pass, sourceFiles, backend, compiler, spirvVersion, shaderArtifacts);
     compiledManifest.passes.push(compiledPass.manifest);
     Object.assign(files, compiledPass.files);
   }
@@ -542,8 +552,10 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
     files[buildAssetOutputPath(asset)] = cloneVirtualFileValue(sourceFile);
   }
 
-  const compiledManifestDiagnostics = await validateCompiledManifestAgainstSchema(compiledManifest);
-  diagnostics.push(...compiledManifestDiagnostics);
+  if (backend === 'spirv') {
+    const compiledManifestDiagnostics = await validateCompiledManifestAgainstSchema(compiledManifest);
+    diagnostics.push(...compiledManifestDiagnostics);
+  }
 
   files['manifest.json'] = JSON.stringify(compiledManifest, null, 2);
   return {
@@ -552,19 +564,21 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
   };
 }
 
-async function compilePass(pass, sourceFiles, compiler, spirvVersion, shaderArtifacts) {
+async function compilePass(pass, sourceFiles, backend, compiler, spirvVersion, shaderArtifacts) {
   if (pass.type === 'render') {
-    const vertexArtifact = await getOrCompileShaderArtifact(
+    const vertexArtifact = await getOrBuildShaderArtifact(
       normalizeRelativePath(pass.vertexShader),
       sourceFiles,
+      backend,
       compiler,
       'vertex',
       spirvVersion,
       shaderArtifacts
     );
-    const fragmentArtifact = await getOrCompileShaderArtifact(
+    const fragmentArtifact = await getOrBuildShaderArtifact(
       normalizeRelativePath(pass.fragmentShader),
       sourceFiles,
+      backend,
       compiler,
       'fragment',
       spirvVersion,
@@ -579,28 +593,20 @@ async function compilePass(pass, sourceFiles, compiler, spirvVersion, shaderArti
           vertex: vertexArtifact.outputPath,
           fragment: fragmentArtifact.outputPath
         },
-        vertexInput: mergeVertexInputReflection(
-          vertexArtifact.reflection.entryPoint.inputVariables,
-          parseGlslDeclaredVertexInputs(vertexArtifact.source)
-        ),
+        vertexInput: vertexArtifact.reflection.entryPoint.inputVariables,
         bindings: mergeBindingReflection(
-          reconcileBindingsWithSource(
-            vertexArtifact.reflection.entryPoint.bindings,
-            parseGlslDeclaredBindings(vertexArtifact.source)
-          ),
-          reconcileBindingsWithSource(
-            fragmentArtifact.reflection.entryPoint.bindings,
-            parseGlslDeclaredBindings(fragmentArtifact.source)
-          )
+          vertexArtifact.reflection.entryPoint.bindings,
+          fragmentArtifact.reflection.entryPoint.bindings
         )
       },
       files: buildShaderFilesMap([vertexArtifact, fragmentArtifact])
     };
   }
 
-  const computeArtifact = await getOrCompileShaderArtifact(
+  const computeArtifact = await getOrBuildShaderArtifact(
     normalizeRelativePath(pass.computeShader),
     sourceFiles,
+    backend,
     compiler,
     'compute',
     spirvVersion,
@@ -615,55 +621,317 @@ async function compilePass(pass, sourceFiles, compiler, spirvVersion, shaderArti
         compute: computeArtifact.outputPath
       },
       localSize: computeArtifact.reflection.entryPoint.localSize,
-      bindings: reconcileBindingsWithSource(
-        computeArtifact.reflection.entryPoint.bindings,
-        parseGlslDeclaredBindings(computeArtifact.source)
-      )
+      bindings: computeArtifact.reflection.entryPoint.bindings
     },
     files: buildShaderFilesMap([computeArtifact])
   };
 }
 
-async function getOrCompileShaderArtifact(shaderPath, sourceFiles, compiler, stage, spirvVersion, shaderArtifacts) {
-  const cacheKey = `${stage}:${shaderPath}`;
+async function getOrBuildShaderArtifact(shaderPath, sourceFiles, backend, compiler, stage, spirvVersion, shaderArtifacts) {
+  const cacheKey = `${backend}:${stage}:${shaderPath}`;
   const existing = shaderArtifacts.get(cacheKey);
   if (existing) {
     return existing;
   }
 
-  const source = sourceFiles[shaderPath];
-  let spirv;
-  try {
-    spirv = await compileShaderSource(compiler, source, stage, spirvVersion);
-  } catch (error) {
-    throw new FilterCompilerError('Shader compilation failed.', [
-      buildShaderCompileDiagnostic(stage, shaderPath, source, error)
-    ]);
+  const preprocessed = preprocessShaderSource(shaderPath, sourceFiles);
+  if (preprocessed.diagnostics.some((item) => item.severity === 'error')) {
+    throw new FilterCompilerError('Shader source preprocessing failed.', preprocessed.diagnostics);
   }
 
-  const artifact = {
-    stage,
-    sourcePath: shaderPath,
-    source,
-    outputPath: buildShaderOutputPath(shaderPath),
-    reflection: reflectSpirv(spirv, stage),
-    bytes: wordsToBytes(spirv)
-  };
+  const interfaceInfo = parseGlslSourceInterface(preprocessed.source);
+  if (interfaceInfo.diagnostics.length > 0) {
+    throw new FilterCompilerError('Shader source preprocessing failed.', mapPreprocessDiagnostics(
+      interfaceInfo.diagnostics.map((item) => ({ severity: 'error', ...item })),
+      preprocessed.sourceMap,
+      shaderPath
+    ));
+  }
+
+  const reflection = buildGlslReflection(interfaceInfo, stage, preprocessed.source);
+  const artifact = backend === 'web-preview'
+    ? buildWebPreviewShaderArtifact(shaderPath, preprocessed, stage, reflection)
+    : await buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection);
 
   shaderArtifacts.set(cacheKey, artifact);
   return artifact;
 }
 
+async function buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection) {
+  let spirv;
+  try {
+    spirv = await compileShaderSource(compiler, preprocessed.source, stage, spirvVersion);
+  } catch (error) {
+    throw new FilterCompilerError('Shader compilation failed.', [
+      buildShaderCompileDiagnostic(stage, shaderPath, preprocessed, error)
+    ]);
+  }
+
+  return {
+    stage,
+    sourcePath: shaderPath,
+    source: preprocessed.source,
+    sourceMap: preprocessed.sourceMap,
+    outputPath: buildShaderOutputPath(shaderPath),
+    reflection,
+    bytes: wordsToBytes(spirv)
+  };
+}
+
+function buildWebPreviewShaderArtifact(shaderPath, preprocessed, stage, reflection) {
+  return {
+    stage,
+    sourcePath: shaderPath,
+    source: preprocessed.source,
+    sourceMap: preprocessed.sourceMap,
+    outputPath: buildWebPreviewShaderOutputPath(shaderPath),
+    reflection,
+    text: preprocessed.source,
+    mapText: JSON.stringify(preprocessed.sourceMap, null, 2)
+  };
+}
+
 function buildShaderFilesMap(artifacts) {
   const files = {};
   for (const artifact of artifacts) {
-    files[artifact.outputPath] = artifact.bytes;
+    files[artifact.outputPath] = artifact.bytes ?? artifact.text;
+    if (artifact.mapText) {
+      files[`${artifact.outputPath}.map.json`] = artifact.mapText;
+    }
   }
   return files;
 }
 
 function buildShaderOutputPath(shaderPath) {
   return normalizeRelativePath(shaderPath).replace(/\.glsl$/i, '.spv');
+}
+
+function buildWebPreviewShaderOutputPath(shaderPath) {
+  return normalizeRelativePath(shaderPath);
+}
+
+function preprocessShaderSource(shaderPath, sourceFiles, includeStack = []) {
+  const normalizedPath = normalizeRelativePath(shaderPath);
+  const source = sourceFiles[normalizedPath];
+  if (typeof source !== 'string') {
+    throw new FilterCompilerError('Shader source preprocessing failed.', [
+      errorDiagnostic('missing_shader_file', `Missing shader file: ${normalizedPath}`, normalizedPath)
+    ]);
+  }
+  if (includeStack.includes(normalizedPath)) {
+    throw new FilterCompilerError('Shader source preprocessing failed.', [
+      errorDiagnostic(
+        'circular_shader_include',
+        `Circular shader include: ${[...includeStack, normalizedPath].join(' -> ')}`,
+        normalizedPath
+      )
+    ]);
+  }
+
+  const outputLines = [];
+  const sourceMap = [];
+  const diagnostics = [];
+  const sourceLines = splitLines(source);
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const line = sourceLines[index];
+    const includeMatch = /^\s*#include\s+[<"]([^>"]+)[>"]\s*$/.exec(line);
+    if (includeMatch) {
+      const includePath = resolveShaderIncludePath(normalizedPath, includeMatch[1]);
+      const included = preprocessShaderSource(includePath, sourceFiles, [...includeStack, normalizedPath]);
+      outputLines.push(...splitLines(included.source));
+      sourceMap.push(...included.sourceMap);
+      diagnostics.push(...included.diagnostics);
+      continue;
+    }
+
+    outputLines.push(line);
+    sourceMap.push({
+      path: normalizedPath,
+      line: index + 1
+    });
+  }
+
+  const normalized = normalizeGlslBlockLayouts(outputLines.join('\n'), sourceMap, normalizedPath);
+  return {
+    ...normalized,
+    diagnostics: [
+      ...diagnostics,
+      ...normalized.diagnostics
+    ]
+  };
+}
+
+const BLOCK_LAYOUT_STANDARDS = new Set(['std140', 'std430', 'shared', 'packed', 'scalar']);
+
+function normalizeGlslBlockLayouts(source, sourceMap, fallbackPath) {
+  const lines = splitLines(source);
+  const diagnostics = [];
+  const normalizedLines = lines.map((line, index) => {
+    const blockMatch = /^(\s*)layout\s*\(([^)]*)\)(\s+(?:(?:readonly|writeonly)\s+)?)(uniform|buffer)(\s+[A-Za-z_][A-Za-z0-9_]*\s*\{.*)$/.exec(line);
+    if (!blockMatch) {
+      return line;
+    }
+
+    const storage = blockMatch[4];
+    const requiredStandard = storage === 'uniform' ? 'std140' : 'std430';
+    const layoutItems = blockMatch[2].split(',').map((item) => item.trim()).filter(Boolean);
+    const explicitStandards = layoutItems.filter((item) => BLOCK_LAYOUT_STANDARDS.has(item));
+    const sourceLocation = sourceMap[index] ?? { path: fallbackPath, line: index + 1 };
+
+    if (explicitStandards.length > 0 && (explicitStandards.length !== 1 || explicitStandards[0] !== requiredStandard)) {
+      diagnostics.push(errorDiagnostic(
+        'invalid_block_layout_standard',
+        `${storage === 'uniform' ? 'Uniform block' : 'Storage buffer'} layout must use ${requiredStandard}. Found ${explicitStandards.join(', ')}.`,
+        sourceLocation.path,
+        sourceLocation.line
+      ));
+      return line;
+    }
+
+    if (explicitStandards[0] === requiredStandard) {
+      return line;
+    }
+
+    const normalizedLayout = [requiredStandard, ...layoutItems].join(', ');
+    return `${blockMatch[1]}layout(${normalizedLayout})${blockMatch[3]}${storage}${blockMatch[5]}`;
+  });
+
+  return {
+    source: normalizedLines.join('\n'),
+    sourceMap,
+    diagnostics
+  };
+}
+
+function mapPreprocessDiagnostics(diagnostics, sourceMap, fallbackPath) {
+  return diagnostics.map((item) => {
+    const sourceLocation = item.line ? sourceMap?.[item.line - 1] : null;
+    return {
+      severity: item.severity ?? 'error',
+      code: item.code,
+      message: item.message,
+      path: item.path ?? sourceLocation?.path ?? fallbackPath,
+      line: item.path ? item.line : (sourceLocation?.line ?? item.line),
+      column: item.column
+    };
+  });
+}
+
+function resolveShaderIncludePath(fromPath, includePath) {
+  const normalizedIncludePath = normalizeRelativePath(includePath);
+  if (includePath.startsWith('/')) return normalizeRelativePath(includePath.slice(1));
+  const directory = normalizeRelativePath(fromPath).split('/').slice(0, -1).join('/');
+  return normalizeRelativePath(directory ? `${directory}/${normalizedIncludePath}` : normalizedIncludePath);
+}
+
+function buildGlslReflection(interfaceInfo, stage, source) {
+  return {
+    entryPoint: {
+      inputVariables: stage === 'vertex'
+        ? interfaceInfo.vertexInputs.map((input) => ({
+            name: input.name,
+            location: input.location,
+            type: input.typeName
+          }))
+        : [],
+      bindings: interfaceInfo.bindings.map((binding) => normalizeGlslBindingForManifest(binding)),
+      localSize: stage === 'compute' ? extractComputeLocalSize(source) : undefined
+    }
+  };
+}
+
+function normalizeGlslBindingForManifest(binding) {
+  const normalized = {
+    set: binding.set,
+    binding: binding.binding,
+    name: binding.name,
+    type: binding.type
+  };
+
+  if (binding.type === 'buffer') {
+    normalized.access = binding.access;
+    normalized.elementType = binding.elementType;
+  }
+
+  if (binding.type === 'uniformBlock') {
+    normalized.fields = layoutUniformBlockFields(binding.fields ?? []);
+  }
+
+  if (binding.type === 'uniform') {
+    normalized.valueType = binding.valueType;
+  }
+
+  return normalized;
+}
+
+function layoutUniformBlockFields(fields) {
+  let offset = 0;
+  return fields.map((field) => {
+    const layout = getUniformFieldLayout(field.type);
+    const fieldOffset = alignTo(offset, layout.align);
+    offset = fieldOffset + layout.size;
+    return {
+      ...field,
+      offset: fieldOffset,
+      size: layout.size
+    };
+  });
+}
+
+function getUniformFieldLayout(type) {
+  switch (type) {
+    case 'float':
+    case 'bool':
+    case 'int':
+    case 'uint':
+      return { align: 4, size: 4 };
+    case 'vec2':
+    case 'ivec2':
+    case 'uvec2':
+      return { align: 8, size: 8 };
+    case 'vec3':
+    case 'vec4':
+    case 'ivec3':
+    case 'ivec4':
+    case 'uvec3':
+    case 'uvec4':
+      return { align: 16, size: 16 };
+    case 'mat2':
+      return { align: 16, size: 32 };
+    case 'mat3':
+      return { align: 16, size: 48 };
+    case 'mat4':
+      return { align: 16, size: 64 };
+    default:
+      return { align: 4, size: 4 };
+  }
+}
+
+function alignTo(value, alignment) {
+  return Math.ceil(value / alignment) * alignment;
+}
+
+function extractComputeLocalSize(source) {
+  const layoutMatch = /layout\s*\(\s*([^)]*local_size_[^)]*)\)\s*in\s*;/m.exec(source);
+  const layout = layoutMatch?.[1] ?? '';
+  const readSize = (axis) => {
+    const match = new RegExp(String.raw`local_size_${axis}\s*=\s*(\d+)`).exec(layout);
+    return match ? Number.parseInt(match[1], 10) : 1;
+  };
+  return {
+    x: readSize('x'),
+    y: readSize('y'),
+    z: readSize('z')
+  };
+}
+
+function glslVectorComponentCount(typeName) {
+  const match = /^(?:[iub]?vec)(\d)$/.exec(typeName ?? '');
+  return match ? Number.parseInt(match[1], 10) : 1;
+}
+
+function splitLines(value) {
+  return String(value ?? '').split('\n');
 }
 
 async function compileShaderSource(compiler, source, stage, spirvVersion) {
@@ -674,22 +942,53 @@ async function compileShaderSource(compiler, source, stage, spirvVersion) {
   return words instanceof Uint32Array ? words : new Uint32Array(words);
 }
 
-function buildShaderCompileDiagnostic(stage, shaderPath, source, error) {
-  const location = extractShaderErrorLocation(error?.message ?? '');
-  const excerpt = formatSourceExcerpt(source, location?.line);
+function buildShaderCompileDiagnostic(stage, shaderPath, preprocessed, error) {
+  const compilerLog = normalizeCompilerLog(error?.compilerLog);
+  const detailMessages = extractShaderErrorMessages(compilerLog);
+  const location = extractShaderErrorLocation(compilerLog || (error?.message ?? ''));
+  const sourceLocation = location ? preprocessed.sourceMap?.[location.line - 1] : null;
+  const detail = detailMessages.length > 0
+    ? detailMessages.join('\n')
+    : error?.message ?? 'Unknown shader compiler error.';
   const message = [
-    `${stage} shader compilation failed for ${shaderPath}: ${error?.message ?? 'Unknown shader compiler error.'}`,
-    excerpt ? `Source excerpt:\n${excerpt}` : ''
+    `${stage} shader compilation failed for ${shaderPath}.`,
+    detail
   ].filter(Boolean).join('\n');
 
   return {
     severity: 'error',
     code: 'shader_compile_error',
     message,
-    path: shaderPath,
-    line: location?.line,
+    path: sourceLocation?.path ?? shaderPath,
+    line: sourceLocation?.line ?? location?.line,
     column: location?.column
   };
+}
+
+function normalizeCompilerLog(value) {
+  return typeof value === 'string'
+    ? value
+        .split(/\r?\n/)
+        .map((line) => line.trimEnd())
+        .filter((line) => line.length > 0)
+        .join('\n')
+    : '';
+}
+
+function extractShaderErrorMessages(log) {
+  if (!log) return [];
+
+  const messages = [];
+  for (const line of log.split(/\r?\n/)) {
+    if (/^Parse failed\b/i.test(line)) continue;
+    if (/^ERROR:\s*\d+:\d+:\s*''\s*:\s*compilation terminated/i.test(line)) continue;
+    if (/^ERROR:\s*\d+\s+compilation errors?\.\s+No code generated\./i.test(line)) continue;
+    if (/^ERROR:/i.test(line)) {
+      messages.push(line);
+    }
+  }
+
+  return messages.length > 0 ? messages : [log];
 }
 
 function extractShaderErrorLocation(message) {
@@ -711,25 +1010,6 @@ function extractShaderErrorLocation(message) {
   }
 
   return null;
-}
-
-function formatSourceExcerpt(source, line) {
-  if (typeof source !== 'string' || source.length === 0) return '';
-
-  const lines = source.split(/\r?\n/);
-  const targetLine = Number.isInteger(line) && line > 0 ? line : 1;
-  const startLine = Math.max(1, targetLine - 2);
-  const endLine = Math.min(lines.length, Number.isInteger(line) && line > 0 ? targetLine + 2 : 12);
-  const width = String(endLine).length;
-
-  return lines
-    .slice(startLine - 1, endLine)
-    .map((text, index) => {
-      const currentLine = startLine + index;
-      const marker = currentLine === line ? '>' : ' ';
-      return `${marker} ${String(currentLine).padStart(width, ' ')} | ${text}`;
-    })
-    .join('\n');
 }
 
 function mergeBindingReflection(...bindingGroups) {
@@ -830,12 +1110,14 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function errorDiagnostic(code, message, filePath) {
+function errorDiagnostic(code, message, filePath, line, column) {
   return {
     severity: 'error',
     code,
     message,
-    path: filePath
+    path: filePath,
+    line,
+    column
   };
 }
 
