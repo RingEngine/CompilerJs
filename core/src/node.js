@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compileFilterSourceFiles } from './index.js';
+import { compileFilterSourceFilesWithDiagnostics } from './index.js';
 import { createNodeShaderCompiler } from './glslang-node.js';
 
 /**
@@ -22,12 +22,22 @@ export function readFilterSourceDirectory(rootDirectory) {
  * @param {{ sourceName?: string }} [options]
  */
 export async function compileFilterSourceDirectory(rootDirectory, options = {}) {
+  const result = await compileFilterSourceDirectoryWithDiagnostics(rootDirectory, options);
+  return result.files;
+}
+
+/**
+ * @param {string} rootDirectory
+ * @param {{ sourceName?: string, compiler?: import('./index.js').ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} [options]
+ */
+export async function compileFilterSourceDirectoryWithDiagnostics(rootDirectory, options = {}) {
   const resolvedRootDirectory = resolveNodePath(rootDirectory);
   const files = readFilterSourceDirectory(resolvedRootDirectory);
   const compiler = options.compiler ?? await createNodeShaderCompiler();
-  return await compileFilterSourceFiles(files, {
-    sourceName: options.sourceName ?? path.basename(resolvedRootDirectory)
-    , compiler
+  return await compileFilterSourceFilesWithDiagnostics(files, {
+    sourceName: options.sourceName ?? path.basename(resolvedRootDirectory),
+    compiler,
+    spirvVersion: options.spirvVersion
   });
 }
 

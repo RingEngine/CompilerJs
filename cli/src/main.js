@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { FilterCompilerError, compileFilterSourceFiles, validateFilterSource } from '@ring-engine-org/filter-compiler-core';
+import { FilterCompilerError, compileFilterSourceFilesWithDiagnostics } from '@ring-engine-org/filter-compiler-core';
 import { createNodeShaderCompiler } from '@ring-engine-org/filter-compiler-core/glslang-node';
 import { readFilterSourceDirectory } from '@ring-engine-org/filter-compiler-core/node';
 import { listFilterPackage, packFilterPackage, unpackFilterPackage, MAGIC } from '@ring-engine-org/filter-packer';
@@ -40,32 +40,29 @@ try {
 
 async function handleCheck(args) {
   const input = requireArg(args, 'input');
-  const sourceFiles = readFilterSourceDirectory(input);
-  const validation = await validateFilterSource(sourceFiles);
-  printDiagnostics(validation.diagnostics);
-
-  if (!validation.ok) {
-    throw new CliDiagnosticsError('Source project validation failed.', validation.diagnostics, true);
-  }
+  const compiled = await compileSourceDirectory(input);
 
   console.log(JSON.stringify({
     ok: true,
     inputDirectory: path.resolve(input),
-    warningCount: countDiagnostics(validation.diagnostics, 'warning'),
-    diagnosticCount: validation.diagnostics.length
+    warningCount: countDiagnostics(compiled.diagnostics, 'warning'),
+    diagnosticCount: compiled.diagnostics.length
   }, null, 2));
 }
 
 async function handleCompile(args) {
   const input = requireArg(args, 'input');
   const output = requireArg(args, 'output');
-  const compiledFiles = await compileSourceDirectory(input);
+  const compiled = await compileSourceDirectory(input);
+  const compiledFiles = compiled.files;
   await writeFileMapToDirectory(output, compiledFiles);
 
   console.log(JSON.stringify({
     ok: true,
     inputDirectory: path.resolve(input),
     outputDirectory: path.resolve(output),
+    warningCount: countDiagnostics(compiled.diagnostics, 'warning'),
+    diagnosticCount: compiled.diagnostics.length,
     outputFileCount: Object.keys(compiledFiles).length,
     files: summarizeVirtualFiles(compiledFiles)
   }, null, 2));
@@ -82,7 +79,7 @@ async function handlePack(args) {
   const privateKey = await resolveSecretArg(args, 'private-key');
   const includeCompiling = Boolean(args['include-compiling']);
   const files = includeCompiling
-    ? await compileSourceDirectory(input)
+    ? (await compileSourceDirectory(input)).files
     : await readDirectoryAsFileMap(input);
   const packed = await packFilterPackage({
     masterKey,
@@ -204,18 +201,13 @@ function isFilterPackage(bytes) {
 async function compileSourceDirectory(inputDirectory) {
   const resolvedInput = path.resolve(inputDirectory);
   const sourceFiles = readFilterSourceDirectory(resolvedInput);
-  const validation = await validateFilterSource(sourceFiles);
-  printDiagnostics(validation.diagnostics);
-
-  if (!validation.ok) {
-    throw new CliDiagnosticsError('Source project validation failed.', validation.diagnostics, true);
-  }
-
   const compiler = await createNodeShaderCompiler();
-  return await compileFilterSourceFiles(sourceFiles, {
+  const compiled = await compileFilterSourceFilesWithDiagnostics(sourceFiles, {
     sourceName: path.basename(resolvedInput),
     compiler
   });
+  printDiagnostics(compiled.diagnostics);
+  return compiled;
 }
 
 function printDiagnostics(diagnostics) {
@@ -257,28 +249,12 @@ function summarizeVirtualFiles(files) {
 }
 
 function printCommandError(error) {
-  if (error?.name === 'CliDiagnosticsError') {
-    if (!error.diagnosticsPrinted) {
-      printDiagnostics(error.diagnostics);
-    }
-    return;
-  }
-
   if (error instanceof FilterCompilerError) {
     printDiagnostics(error.diagnostics);
     return;
   }
 
   console.error(error.message || String(error));
-}
-
-class CliDiagnosticsError extends Error {
-  constructor(message, diagnostics, diagnosticsPrinted = false) {
-    super(message);
-    this.name = 'CliDiagnosticsError';
-    this.diagnostics = diagnostics;
-    this.diagnosticsPrinted = diagnosticsPrinted;
-  }
 }
 
 function printUsage() {

@@ -1,6 +1,6 @@
 {
   "name": "@ring-engine-org/filter-compiler-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Ring Engine filter compiler core for compiling filter-src projects in Node.js and the browser.",
   "files": [

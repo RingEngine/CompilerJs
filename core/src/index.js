@@ -40,6 +40,7 @@ const DECLARED_UNIFORM_FIELD_TYPES = new Set([
  * @typedef {{ path: string, text?: string, bytes?: Uint8Array, mediaType?: string }} MemoryFile
  * @typedef {{ severity: 'error'|'warning', code: string, message: string, path?: string, line?: number, column?: number }} Diagnostic
  * @typedef {Record<string, string|Uint8Array>} VirtualFileMap
+ * @typedef {{ ok: boolean, files: VirtualFileMap, diagnostics: Diagnostic[] }} CompileResult
  * @typedef {{ compileGLSL(source: string, stage: 'vertex'|'fragment'|'compute', options?: { debug?: boolean, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }): Promise<Uint32Array>|Uint32Array }} ShaderCompiler
  */
 
@@ -96,6 +97,19 @@ export function normalizeMemoryFiles(input) {
  * @returns {Promise<VirtualFileMap>}
  */
 export async function compileFilterSourceFiles(input, options) {
+  const result = await compileFilterSourceFilesWithDiagnostics(input, options);
+  return result.files;
+}
+
+/**
+ * Compile a virtual `filter-src` file map and return produced files plus
+ * warnings discovered during the full compile/reflection pipeline.
+ *
+ * @param {Record<string, string|Uint8Array|MemoryFile>|MemoryFile[]} input
+ * @param {{ sourceName?: string, compiler: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
+ * @returns {Promise<CompileResult>}
+ */
+export async function compileFilterSourceFilesWithDiagnostics(input, options) {
   if (!options || !options.compiler) {
     throw new Error('compileFilterSourceFiles requires options.compiler.');
   }
@@ -130,14 +144,37 @@ export async function compileFilterSourceFiles(input, options) {
   }
 
   const normalizedManifest = normalizeSourceManifest(manifestRecord.manifest);
-  return await buildCompiledFileMap(
-    normalizedManifest,
-    mainLuaText,
-    sourceFiles,
-    sourceName,
-    options.compiler,
-    options.spirvVersion ?? '1.0'
-  );
+  let compiledResult;
+  try {
+    compiledResult = await buildCompiledFileMap(
+      normalizedManifest,
+      mainLuaText,
+      sourceFiles,
+      sourceName,
+      options.compiler,
+      options.spirvVersion ?? '1.0'
+    );
+  } catch (error) {
+    if (error instanceof FilterCompilerError) {
+      throw new FilterCompilerError(error.message, [
+        ...diagnostics,
+        ...error.diagnostics
+      ]);
+    }
+    throw error;
+  }
+
+  diagnostics.push(...compiledResult.diagnostics);
+
+  if (diagnostics.some((item) => item.severity === 'error')) {
+    throw new FilterCompilerError('Source project validation failed.', diagnostics);
+  }
+
+  return {
+    ok: true,
+    files: compiledResult.files,
+    diagnostics
+  };
 }
 
 /**
@@ -191,9 +228,10 @@ export async function validateFilterSource(input) {
  * @param {{ sourceName?: string, compiler: ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} options
  */
 export async function compileFilterSource(input, options) {
-  const files = await compileFilterSourceFiles(input, options);
+  const { files, diagnostics } = await compileFilterSourceFilesWithDiagnostics(input, options);
   return {
     files,
+    diagnostics,
     manifest: JSON.parse(String(files['manifest.json'])),
     summary: {
       outputFileCount: Object.keys(files).length
@@ -466,6 +504,7 @@ function normalizeSourceManifest(manifest) {
 
 async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceName, compiler, spirvVersion) {
   const files = {};
+  const diagnostics = [];
   const shaderArtifacts = new Map();
   const compiledManifest = {
     $schema: FILTER_SCHEMA_URL,
@@ -496,9 +535,7 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
     assets: manifest.assets,
     passes: compiledManifest.passes
   });
-  if (luaDiagnostics.some((item) => item.severity === 'error')) {
-    throw new FilterCompilerError('Source project validation failed.', luaDiagnostics);
-  }
+  diagnostics.push(...luaDiagnostics);
 
   for (const asset of manifest.assets) {
     const sourceFile = sourceFiles[normalizeRelativePath(asset.path)];
@@ -506,12 +543,13 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
   }
 
   const compiledManifestDiagnostics = await validateCompiledManifestAgainstSchema(compiledManifest);
-  if (compiledManifestDiagnostics.some((item) => item.severity === 'error')) {
-    throw new FilterCompilerError('Compiled manifest validation failed.', compiledManifestDiagnostics);
-  }
+  diagnostics.push(...compiledManifestDiagnostics);
 
   files['manifest.json'] = JSON.stringify(compiledManifest, null, 2);
-  return files;
+  return {
+    files,
+    diagnostics
+  };
 }
 
 async function compilePass(pass, sourceFiles, compiler, spirvVersion, shaderArtifacts) {
@@ -599,11 +637,7 @@ async function getOrCompileShaderArtifact(shaderPath, sourceFiles, compiler, sta
     spirv = await compileShaderSource(compiler, source, stage, spirvVersion);
   } catch (error) {
     throw new FilterCompilerError('Shader compilation failed.', [
-      errorDiagnostic(
-        'shader_compile_error',
-        `${stage} shader compilation failed: ${error.message}`,
-        shaderPath
-      )
+      buildShaderCompileDiagnostic(stage, shaderPath, source, error)
     ]);
   }
 
@@ -638,6 +672,64 @@ async function compileShaderSource(compiler, source, stage, spirvVersion) {
     spirvVersion
   });
   return words instanceof Uint32Array ? words : new Uint32Array(words);
+}
+
+function buildShaderCompileDiagnostic(stage, shaderPath, source, error) {
+  const location = extractShaderErrorLocation(error?.message ?? '');
+  const excerpt = formatSourceExcerpt(source, location?.line);
+  const message = [
+    `${stage} shader compilation failed for ${shaderPath}: ${error?.message ?? 'Unknown shader compiler error.'}`,
+    excerpt ? `Source excerpt:\n${excerpt}` : ''
+  ].filter(Boolean).join('\n');
+
+  return {
+    severity: 'error',
+    code: 'shader_compile_error',
+    message,
+    path: shaderPath,
+    line: location?.line,
+    column: location?.column
+  };
+}
+
+function extractShaderErrorLocation(message) {
+  const patterns = [
+    /ERROR:\s*\d+:(\d+):(?:(\d+):)?/i,
+    /(?:^|\D)(\d+):(\d+):\s*(?:error|ERROR)\b/,
+    /\bline\s+(\d+)(?:[,:\s]+column\s+(\d+))?/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(message);
+    if (!match) continue;
+
+    const line = Number.parseInt(match[1], 10);
+    const column = match[2] !== undefined ? Number.parseInt(match[2], 10) - 1 : undefined;
+    if (Number.isInteger(line) && line > 0) {
+      return { line, column: Number.isInteger(column) && column >= 0 ? column : undefined };
+    }
+  }
+
+  return null;
+}
+
+function formatSourceExcerpt(source, line) {
+  if (typeof source !== 'string' || source.length === 0) return '';
+
+  const lines = source.split(/\r?\n/);
+  const targetLine = Number.isInteger(line) && line > 0 ? line : 1;
+  const startLine = Math.max(1, targetLine - 2);
+  const endLine = Math.min(lines.length, Number.isInteger(line) && line > 0 ? targetLine + 2 : 12);
+  const width = String(endLine).length;
+
+  return lines
+    .slice(startLine - 1, endLine)
+    .map((text, index) => {
+      const currentLine = startLine + index;
+      const marker = currentLine === line ? '>' : ' ';
+      return `${marker} ${String(currentLine).padStart(width, ' ')} | ${text}`;
+    })
+    .join('\n');
 }
 
 function mergeBindingReflection(...bindingGroups) {
