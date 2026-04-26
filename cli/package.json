@@ -29,6 +29,6 @@
   "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/cli",
   "dependencies": {
     "@ring-engine-org/filter-compiler-core": "0.1.2",
-    "@ring-engine-org/filter-packer": "0.1.1"
+    "@ring-engine-org/filter-packer": "0.1.2"
   }
 }
