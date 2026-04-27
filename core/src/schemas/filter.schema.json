@@ -1,0 +1,746 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ring.local/schemas/filter.schema.json",
+  "title": "filter package manifest",
+  "description": "Schema for compiled filter/manifest.json consumed by filter-runtime.",
+  "x-description-zh-CN": "由 filter-runtime 消费的已编译 filter/manifest.json 的 schema。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "formatVersion",
+    "sourceSchemaVersion",
+    "runtimeVersion",
+    "outputSizeMode",
+    "mainScript",
+    "passes"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema reference for tooling.",
+      "x-description-zh-CN": "供工具使用的可选 JSON Schema 引用。"
+    },
+    "kind": {
+      "type": "string",
+      "const": "filter",
+      "description": "Compiled package kind marker.",
+      "x-description-zh-CN": "已编译包的类型标记。"
+    },
+    "formatVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Compiled filter manifest format version.",
+      "x-description-zh-CN": "已编译 filter manifest 格式版本。"
+    },
+    "sourceName": {
+      "type": "string",
+      "description": "Optional compiler-facing source project name.",
+      "x-description-zh-CN": "可选的源工程名称，供编译器和工具使用。"
+    },
+    "sourceSchemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Source manifest schema version used by the source project.",
+      "x-description-zh-CN": "源工程使用的 source manifest schema 版本。"
+    },
+    "runtimeVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Single integer runtime contract version.",
+      "x-description-zh-CN": "单一整数形式的 runtime contract 版本号。"
+    },
+    "outputSizeMode": {
+      "type": "string",
+      "enum": [
+        "passive",
+        "active"
+      ],
+      "description": "Output size decision mode.",
+      "x-description-zh-CN": "输出尺寸决定模式。"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional descriptive metadata copied from source.",
+      "x-description-zh-CN": "从源工程复制而来的可选描述性元信息。"
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parameter"
+      },
+      "description": "Public parameter interface copied from source.",
+      "x-description-zh-CN": "从源工程复制而来的公共参数接口。"
+    },
+    "mainScript": {
+      "$ref": "#/$defs/projectRelativePath",
+      "description": "Runtime Lua entry script path.",
+      "x-description-zh-CN": "运行时 Lua 入口脚本路径。"
+    },
+    "passes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/pass"
+      },
+      "description": "Compiled pass records.",
+      "x-description-zh-CN": "已编译 pass 记录。"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      },
+      "description": "Compiled runtime assets.",
+      "x-description-zh-CN": "已编译运行时资源。"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+    },
+    "projectRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:\\\\)(?!/).+$"
+    },
+    "localSize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "z": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pass": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/renderPass"
+        },
+        {
+          "$ref": "#/$defs/computePass"
+        }
+      ]
+    },
+    "renderPass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "stages",
+        "vertexInput",
+        "bindings"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "const": "render"
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "vertex",
+            "fragment"
+          ],
+          "properties": {
+            "vertex": {
+              "$ref": "#/$defs/projectRelativePath"
+            },
+            "fragment": {
+              "$ref": "#/$defs/projectRelativePath"
+            }
+          }
+        },
+        "vertexInput": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/vertexInput"
+          }
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      }
+    },
+    "computePass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "stages",
+        "localSize",
+        "bindings"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "const": "compute"
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compute"
+          ],
+          "properties": {
+            "compute": {
+              "$ref": "#/$defs/projectRelativePath"
+            }
+          }
+        },
+        "localSize": {
+          "$ref": "#/$defs/localSize"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      }
+    },
+    "vertexInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "location",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "location": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "vec2"
+        }
+      }
+    },
+    "binding": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sampledImageBinding"
+        },
+        {
+          "$ref": "#/$defs/bufferBinding"
+        },
+        {
+          "$ref": "#/$defs/uniformBlockBinding"
+        },
+        {
+          "$ref": "#/$defs/uniformBinding"
+        }
+      ]
+    },
+    "bindingBase": {
+      "type": "object",
+      "required": [
+        "set",
+        "binding",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "set": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "binding": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "sampledImageBinding": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/bindingBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "set",
+            "binding",
+            "name",
+            "type"
+          ],
+          "properties": {
+            "set": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "binding": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "name": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "type": "string",
+              "const": "sampledImage"
+            }
+          }
+        }
+      ]
+    },
+    "bufferBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "set",
+        "binding",
+        "name",
+        "type",
+        "access",
+        "elementType"
+      ],
+      "properties": {
+        "set": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "binding": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "const": "buffer"
+        },
+        "access": {
+          "$ref": "#/$defs/bindingAccess"
+        },
+        "elementType": {
+          "$ref": "#/$defs/bufferElementType"
+        }
+      }
+    },
+    "uniformBlockBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "set",
+        "binding",
+        "name",
+        "type",
+        "fields"
+      ],
+      "properties": {
+        "set": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "binding": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "const": "uniformBlock"
+        },
+        "access": {
+          "type": "string",
+          "const": "read"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uniformField"
+          }
+        }
+      }
+    },
+    "uniformBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "set",
+        "binding",
+        "name",
+        "type",
+        "valueType"
+      ],
+      "properties": {
+        "set": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "binding": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "const": "uniform"
+        },
+        "valueType": {
+          "$ref": "#/$defs/uniformFieldType"
+        }
+      }
+    },
+    "uniformField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "offset",
+        "size"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "$ref": "#/$defs/uniformFieldType"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "bindingAccess": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write",
+        "readWrite"
+      ]
+    },
+    "bufferElementType": {
+      "type": "string",
+      "enum": [
+        "float",
+        "uint"
+      ]
+    },
+    "uniformFieldType": {
+      "type": "string",
+      "enum": [
+        "float",
+        "bool",
+        "int",
+        "uint",
+        "vec2",
+        "vec3",
+        "vec4",
+        "ivec2",
+        "ivec3",
+        "ivec4",
+        "uvec2",
+        "uvec3",
+        "uvec4",
+        "mat2",
+        "mat3",
+        "mat4"
+      ]
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-description-zh-CN": "从源工程复制而来的单个公共参数定义。",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "x-description-zh-CN": "参数逻辑 id。"
+        },
+        "label": {
+          "type": "string",
+          "description": "Editor-facing display label. Not used for compilation or runtime execution.",
+          "x-description-zh-CN": "面向编辑器和作者工具的显示标签，不参与编译和运行时执行。"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "bool",
+            "float",
+            "vec4",
+            "mat4"
+          ],
+          "x-description-zh-CN": "参数基础类型。"
+        },
+        "semantic": {
+          "type": "string",
+          "enum": [
+            "color3",
+            "color4",
+            "ndcPoint2"
+          ],
+          "x-description-zh-CN": "仅对特定类型生效的附加语义约定。当前用于 vec4。"
+        },
+        "default": {
+          "description": "Default parameter value.",
+          "x-description-zh-CN": "参数默认值。"
+        },
+        "min": {
+          "type": "number",
+          "x-description-zh-CN": "数值下界。当前仅对 float 有意义。"
+        },
+        "max": {
+          "type": "number",
+          "x-description-zh-CN": "数值上界。当前仅对 float 有意义。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "semantic"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "semantic"
+              ]
+            },
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "vec4"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "semantic"
+            ],
+            "properties": {
+              "type": {
+                "const": "vec4"
+              },
+              "semantic": {
+                "const": "ndcPoint2"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1
+                  },
+                  {
+                    "const": 0
+                  },
+                  {
+                    "const": 1
+                  }
+                ],
+                "items": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "mat4"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "semantic"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 16,
+                "maxItems": 16,
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/projectRelativePath"
+        }
+      }
+    }
+  }
+}

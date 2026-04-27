@@ -85,7 +85,7 @@ compiler-js/
 它负责：
 
 - 校验 `manifest.json`
-- 通过远程 `filter-src.schema.json` 和 `filter.schema.json` 做 schema 约束
+- 通过包内 bundled `filter-src.schema.json` 和 `filter.schema.json` 做 schema 约束
 - 校验 Lua 语法与当前编译器规则
 - 校验 GLSL 语法与当前编译器规则
 - 预处理 GLSL `#include`，并统一生成前置反射信息

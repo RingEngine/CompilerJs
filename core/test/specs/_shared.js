@@ -1,53 +1,4 @@
-import test from 'node:test';
-
-import { FILTER_SCHEMA_URL, FILTER_SRC_SCHEMA_URL } from '../../src/schema-urls.js';
-
-const originalFetch = globalThis.fetch;
-const filterSrcSchema = await fetchSchema(FILTER_SRC_SCHEMA_URL);
-const filterSchema = await fetchSchema(FILTER_SCHEMA_URL);
-
-function installSchemaFetchMock() {
-  globalThis.fetch = async (url) => {
-    if (url === FILTER_SRC_SCHEMA_URL) {
-      return makeJsonResponse(filterSrcSchema);
-    }
-
-    if (url === FILTER_SCHEMA_URL) {
-      return makeJsonResponse(filterSchema);
-    }
-
-    throw new Error(`Unexpected fetch URL in test: ${url}`);
-  };
-}
-
-function restoreFetch() {
-  globalThis.fetch = originalFetch;
-}
-
-function makeJsonResponse(payload) {
-  return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    async json() {
-      return payload;
-    }
-  };
-}
-
-async function fetchSchema(url) {
-  const response = await originalFetch(url, {
-    headers: {
-      accept: 'application/schema+json, application/json'
-    }
-  });
-
-  if (!response?.ok) {
-    throw new Error(`Failed to load schema fixture from ${url}: ${response?.status} ${response?.statusText}`);
-  }
-
-  return await response.json();
-}
+import { FILTER_SRC_SCHEMA_URL } from '../../src/schema-urls.js';
 
 export function createRenderProject(overrides = {}) {
   const manifest = {
@@ -134,11 +85,3 @@ export function createComputeProject(overrides = {}) {
     ].join('\n')
   };
 }
-
-test.beforeEach(() => {
-  installSchemaFetchMock();
-});
-
-test.after(() => {
-  restoreFetch();
-});

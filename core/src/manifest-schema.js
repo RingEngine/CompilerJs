@@ -1,6 +1,6 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import { parse as parseJsonWithPointers } from 'json-source-map';
-import { FILTER_SRC_SCHEMA_URL } from './schema-urls.js';
+import { filterSrcSchema } from './bundled-schemas.js';
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -38,29 +38,10 @@ export async function validateManifestAgainstSchema(manifest, pointers) {
 
 async function getFilterSrcSchemaValidator() {
   if (!filterSrcSchemaValidatorPromise) {
-    filterSrcSchemaValidatorPromise = loadFilterSrcSchema()
-      .then((schema) => ajv.compile(schema))
-      .catch((error) => {
-        filterSrcSchemaValidatorPromise = null;
-        throw error;
-      });
+    filterSrcSchemaValidatorPromise = Promise.resolve(ajv.compile(filterSrcSchema));
   }
 
   return await filterSrcSchemaValidatorPromise;
-}
-
-async function loadFilterSrcSchema() {
-  const response = await fetch(FILTER_SRC_SCHEMA_URL, {
-    headers: {
-      accept: 'application/schema+json, application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load filter-src schema from ${FILTER_SRC_SCHEMA_URL}: ${response.status} ${response.statusText}`);
-  }
-
-  return await response.json();
 }
 
 function buildSchemaErrorMessage(error) {
