@@ -1,6 +1,6 @@
 {
   "name": "@ring-engine-org/filter-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "description": "Ring Filter Compiler CLI for checking, compiling, packing, listing, and unpacking filter projects.",
   "files": [

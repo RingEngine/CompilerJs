@@ -174,7 +174,8 @@ export const filterSrcSchema = {
           "enum": [
             "color3",
             "color4",
-            "ndcPoint2"
+            "ndcPoint2",
+            "ndcRect"
           ],
           "x-description-zh-CN": "仅对特定类型生效的附加语义约定。当前用于 vec4。"
         },
@@ -223,6 +224,47 @@ export const filterSrcSchema = {
             "properties": {
               "default": {
                 "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "semantic"
+            ],
+            "properties": {
+              "type": {
+                "const": "vec4"
+              },
+              "semantic": {
+                "const": "ndcRect"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ],
+                "items": false
               }
             }
           }
@@ -993,7 +1035,8 @@ export const filterSchema = {
           "enum": [
             "color3",
             "color4",
-            "ndcPoint2"
+            "ndcPoint2",
+            "ndcRect"
           ],
           "x-description-zh-CN": "仅对特定类型生效的附加语义约定。当前用于 vec4。"
         },
@@ -1042,6 +1085,47 @@ export const filterSchema = {
             "properties": {
               "default": {
                 "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "semantic"
+            ],
+            "properties": {
+              "type": {
+                "const": "vec4"
+              },
+              "semantic": {
+                "const": "ndcRect"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ],
+                "items": false
               }
             }
           }
