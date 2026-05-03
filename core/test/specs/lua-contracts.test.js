@@ -164,6 +164,429 @@ test('lintLuaScript accepts clearOutput ctx method', () => {
   ), false);
 });
 
+test('lintLuaScript accepts time runtime library calls', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local wall = {}',
+    '  local now = time.now()',
+    '  time.parts(wall, now, { utc = true })',
+    '  local launchAt = time.fromDate({ year = 2026, month = 5, day = 4, millis = 250 }, { utc = true })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'error' && (
+      item.code === 'unknown_time_method'
+      || item.code === 'invalid_time_call_syntax'
+      || item.code === 'unavailable_lua_library'
+    )
+  ), false);
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && (
+      item.code === 'unexpected_argument_count'
+      || item.code === 'unknown_time_option'
+      || item.code === 'missing_time_from_date_field'
+    )
+  ), false);
+});
+
+test('lintLuaScript errors on unavailable Lua runtime libraries', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local now = os.time()',
+    '  io.open("out.txt")',
+    '  package.path = ""',
+    '  debug.traceback()',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  const unavailable = diagnostics.filter((item) =>
+    item.severity === 'error' && item.code === 'unavailable_lua_library'
+  );
+  assert.equal(unavailable.length, 4);
+});
+
+test('lintLuaScript validates time method names and call syntax', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time:now()',
+    '  time.format(time.now())',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'invalid_time_call_syntax'
+  ));
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'unknown_time_method'
+  ));
+});
+
+test('lintLuaScript warns on invalid time.now argument count', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.now(1)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+});
+
+test('lintLuaScript validates time.parts argument counts', () => {
+  const missingTimestampDiagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.parts({})',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(missingTimestampDiagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+
+  const extraArgumentDiagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.parts({}, time.now(), { utc = true }, true)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(extraArgumentDiagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+});
+
+test('lintLuaScript validates time.parts options literal fields', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.parts({}, time.now(), { utc = true, zone = "utc" })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unknown_time_option'
+  ));
+});
+
+test('lintLuaScript validates time.fromDate argument counts', () => {
+  const missingDateDiagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.fromDate()',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(missingDateDiagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+
+  const extraArgumentDiagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.fromDate({ year = 2026, month = 5, day = 4 }, { utc = true }, true)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(extraArgumentDiagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+});
+
+test('lintLuaScript validates required time.fromDate literal fields individually', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.fromDate({ year = 2026 })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  const missingFields = diagnostics.filter((item) =>
+    item.severity === 'warning' && item.code === 'missing_time_from_date_field'
+  );
+  assert.equal(missingFields.length, 2);
+  assert.ok(missingFields.some((item) => item.message.includes('"month"')));
+  assert.ok(missingFields.some((item) => item.message.includes('"day"')));
+});
+
+test('lintLuaScript accepts optional and derived time.fromDate literal fields', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.fromDate({',
+    '    year = 2026,',
+    '    month = 5,',
+    '    day = 4,',
+    '    hour = 20,',
+    '    min = 30,',
+    '    sec = 12,',
+    '    millis = 345,',
+    '    wday = 1,',
+    '    yday = 124',
+    '  }, { utc = true })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'missing_time_from_date_field'
+  ), false);
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unknown_time_option'
+  ), false);
+});
+
+test('lintLuaScript validates time.fromDate options literal fields', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  time.fromDate({ year = 2026, month = 5, day = 4 }, { utc = true, offset = 0 })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unknown_time_option'
+  ));
+});
+
+test('lintLuaScript does not validate dynamic time tables as literals', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local options = getOptions()',
+    '  local date = getDate()',
+    '  time.parts({}, time.now(), options)',
+    '  time.fromDate(date, options)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && (
+      item.code === 'unknown_time_option'
+      || item.code === 'missing_time_from_date_field'
+    )
+  ), false);
+});
+
+test('lintLuaScript accepts documented mat4 runtime library calls', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local m = {}',
+    '  local n = {}',
+    '  mat4.identity(m)',
+    '  mat4.copy(m, n)',
+    '  mat4.multiply(m, n)',
+    '  mat4.preMultiply(m, n)',
+    '  mat4.translate(m, 1, 2, 3)',
+    '  mat4.scale(m, 1, 2, 3)',
+    '  mat4.rotateX(m, 0.25)',
+    '  mat4.rotateY(m, 0.25)',
+    '  mat4.rotateZ(m, 0.25)',
+    '  mat4.setTranslation(m, 1, 2, 3)',
+    '  mat4.setScale(m, 1, 2, 3)',
+    '  mat4.setRotationX(m, 0.25)',
+    '  mat4.setRotationY(m, 0.25)',
+    '  mat4.setRotationZ(m, 0.25)',
+    '  mat4.setOrtho(m, -1, 1, -1, 1, 0.1, 10)',
+    '  mat4.invert(m)',
+    '  mat4.transpose(m)',
+    '  local x, y, z, w = mat4.transformPoint4(m, 1, 2, 3, 1)',
+    '  local px, py = mat4.transformPoint2(m, 1, 2)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'error' && (
+      item.code === 'unknown_mat4_method'
+      || item.code === 'invalid_mat4_call_syntax'
+    )
+  ), false);
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ), false);
+});
+
+test('lintLuaScript validates mat4 method names and call syntax', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local m = {}',
+    '  mat4:identity(m)',
+    '  mat4.lookAt(m)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'invalid_mat4_call_syntax'
+  ));
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'unknown_mat4_method'
+  ));
+});
+
+test('lintLuaScript validates mat4 argument counts by documented arity', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local m = {}',
+    '  local n = {}',
+    '  mat4.identity()',
+    '  mat4.copy(m)',
+    '  mat4.translate(m, 1, 2)',
+    '  mat4.setOrtho(m, -1, 1, -1, 1, 0.1)',
+    '  mat4.transformPoint4(m, 1, 2, 3)',
+    '  mat4.transformPoint2(m, 1)',
+    '  mat4.rotateX(m, 0.25, 1)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  const argumentWarnings = diagnostics.filter((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  );
+  assert.equal(argumentWarnings.length, 7);
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.identity expects 1')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.copy expects 2')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.translate expects 4')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.setOrtho expects 7')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.transformPoint4 expects 5')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.transformPoint2 expects 3')));
+  assert.ok(argumentWarnings.some((item) => item.message.includes('mat4.rotateX expects 2')));
+});
+
 // Spec:
 // EN: https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_SRC.md?plain=1#L394-L400
 // ZH: https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_SRC.zh-CN.md?plain=1#L394-L400

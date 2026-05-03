@@ -19,6 +19,46 @@ const CTX_RESET_CREATION_METHODS = new Set([
   'createFloatBuffer',
   'createUIntBuffer'
 ]);
+const TIME_METHODS = new Set([
+  'now',
+  'parts',
+  'fromDate'
+]);
+const TIME_OPTIONS_FIELDS = new Set([
+  'utc'
+]);
+const TIME_FROM_DATE_REQUIRED_FIELDS = new Set([
+  'year',
+  'month',
+  'day'
+]);
+const MAT4_METHOD_ARITY = new Map([
+  ['identity', [1, 1]],
+  ['copy', [2, 2]],
+  ['multiply', [2, 2]],
+  ['preMultiply', [2, 2]],
+  ['translate', [4, 4]],
+  ['scale', [4, 4]],
+  ['rotateX', [2, 2]],
+  ['rotateY', [2, 2]],
+  ['rotateZ', [2, 2]],
+  ['setTranslation', [4, 4]],
+  ['setScale', [4, 4]],
+  ['setRotationX', [2, 2]],
+  ['setRotationY', [2, 2]],
+  ['setRotationZ', [2, 2]],
+  ['setOrtho', [7, 7]],
+  ['invert', [1, 1]],
+  ['transpose', [1, 1]],
+  ['transformPoint4', [5, 5]],
+  ['transformPoint2', [3, 3]]
+]);
+const DISALLOWED_RUNTIME_GLOBALS = new Set([
+  'os',
+  'io',
+  'package',
+  'debug'
+]);
 
 /**
  * Validate Lua syntax and statically-known structural constraints.
@@ -62,12 +102,28 @@ export function lintLuaScript(source, symbols) {
   validateEntryFunctions(context);
   validateResetScopedCreationCalls(ast, context);
   walkAst(ast, (node) => {
+    if (node.type === 'MemberExpression') {
+      validateRuntimeMemberExpression(node, context);
+    }
+
     if (node.type !== 'CallExpression') return;
 
     const ctxCall = parseCtxCall(node);
-    if (!ctxCall) return;
+    if (ctxCall) {
+      validateCtxCall(ctxCall, node, context);
+      return;
+    }
 
-    validateCtxCall(ctxCall, node, context);
+    const timeCall = parseTimeCall(node);
+    if (timeCall) {
+      validateTimeCall(timeCall, node, context);
+      return;
+    }
+
+    const mat4Call = parseMat4Call(node);
+    if (mat4Call) {
+      validateMat4Call(mat4Call, node, context);
+    }
   });
 
   return diagnostics;
@@ -154,6 +210,49 @@ function recordEntryFunction(entries, name, functionNode, fallbackLocation = nul
   });
 }
 
+function validateRuntimeMemberExpression(node, context) {
+  const baseName = node.base?.type === 'Identifier' ? node.base.name : null;
+  if (DISALLOWED_RUNTIME_GLOBALS.has(baseName)) {
+    context.diagnostics.push(luaDiagnostic(
+      'unavailable_lua_library',
+      `Lua library "${baseName}" is not available in the filter runtime.`,
+      node.base?.loc?.start?.line,
+      node.base?.loc?.start?.column
+    ));
+    return;
+  }
+
+  if (baseName !== 'time' && baseName !== 'mat4') return;
+  if (node.identifier?.type !== 'Identifier') return;
+  if (node.indexer !== '.') {
+    context.diagnostics.push(luaDiagnostic(
+      `invalid_${baseName}_call_syntax`,
+      `${baseName} functions must be called with dot syntax.`,
+      node.identifier.loc?.start?.line,
+      node.identifier.loc?.start?.column
+    ));
+    return;
+  }
+
+  if (baseName === 'time' && !TIME_METHODS.has(node.identifier.name)) {
+    context.diagnostics.push(luaDiagnostic(
+      'unknown_time_method',
+      `Unknown time method: ${node.identifier.name}`,
+      node.identifier.loc?.start?.line,
+      node.identifier.loc?.start?.column
+    ));
+  }
+
+  if (baseName === 'mat4' && !MAT4_METHOD_ARITY.has(node.identifier.name)) {
+    context.diagnostics.push(luaDiagnostic(
+      'unknown_mat4_method',
+      `Unknown mat4 method: ${node.identifier.name}`,
+      node.identifier.loc?.start?.line,
+      node.identifier.loc?.start?.column
+    ));
+  }
+}
+
 function validateCtxCall(ctxCall, node, context) {
   const { method } = ctxCall;
   if (!CTX_METHODS.has(method)) {
@@ -172,6 +271,77 @@ function validateCtxCall(ctxCall, node, context) {
 
   if (method === 'runComputePass') {
     validateRunPass(node, context);
+  }
+}
+
+function validateTimeCall(timeCall, node, context) {
+  if (!TIME_METHODS.has(timeCall.method)) return;
+
+  if (timeCall.method === 'now') {
+    validateArgumentCount(node, context, 'time.now', 0, 0);
+    return;
+  }
+
+  if (timeCall.method === 'parts') {
+    validateArgumentCount(node, context, 'time.parts', 2, 3);
+    validateTimeOptions(node.arguments?.[2], context);
+    return;
+  }
+
+  if (timeCall.method === 'fromDate') {
+    validateArgumentCount(node, context, 'time.fromDate', 1, 2);
+    validateTimeFromDateLiteral(node.arguments?.[0], context);
+    validateTimeOptions(node.arguments?.[1], context);
+  }
+}
+
+function validateMat4Call(mat4Call, node, context) {
+  const arity = MAT4_METHOD_ARITY.get(mat4Call.method);
+  if (!arity) return;
+
+  validateArgumentCount(node, context, `mat4.${mat4Call.method}`, arity[0], arity[1]);
+}
+
+function validateArgumentCount(node, context, label, min, max) {
+  const count = node.arguments?.length ?? 0;
+  if (count >= min && count <= max) return;
+  const expected = min === max ? String(min) : `${min} to ${max}`;
+  context.diagnostics.push(luaDiagnostic(
+    'unexpected_argument_count',
+    `${label} expects ${expected} argument(s), but got ${count}.`,
+    node.loc?.start?.line,
+    node.loc?.start?.column,
+    'warning'
+  ));
+}
+
+function validateTimeOptions(optionsNode, context) {
+  if (optionsNode?.type !== 'TableConstructorExpression') return;
+  const fields = getTableStringFields(optionsNode);
+  for (const [key, field] of fields.entries()) {
+    if (TIME_OPTIONS_FIELDS.has(key)) continue;
+    context.diagnostics.push(luaDiagnostic(
+      'unknown_time_option',
+      `time options have no field named "${key}".`,
+      field.key?.loc?.start?.line,
+      field.key?.loc?.start?.column,
+      'warning'
+    ));
+  }
+}
+
+function validateTimeFromDateLiteral(dateNode, context) {
+  if (dateNode?.type !== 'TableConstructorExpression') return;
+  const fields = getTableStringFields(dateNode);
+  for (const key of TIME_FROM_DATE_REQUIRED_FIELDS) {
+    if (fields.has(key)) continue;
+    context.diagnostics.push(luaDiagnostic(
+      'missing_time_from_date_field',
+      `time.fromDate date table requires field "${key}".`,
+      dateNode.loc?.start?.line,
+      dateNode.loc?.start?.column,
+      'warning'
+    ));
   }
 }
 
@@ -265,6 +435,30 @@ function parseCtxCall(node) {
   if (base?.type !== 'MemberExpression') return null;
   if (base.indexer !== ':') return null;
   if (base.base?.type !== 'Identifier' || base.base.name !== 'ctx') return null;
+  if (base.identifier?.type !== 'Identifier') return null;
+
+  return {
+    method: base.identifier.name,
+    location: base.identifier.loc
+  };
+}
+
+function parseTimeCall(node) {
+  const base = node.base;
+  if (base?.type !== 'MemberExpression') return null;
+  if (base.base?.type !== 'Identifier' || base.base.name !== 'time') return null;
+  if (base.identifier?.type !== 'Identifier') return null;
+
+  return {
+    method: base.identifier.name,
+    location: base.identifier.loc
+  };
+}
+
+function parseMat4Call(node) {
+  const base = node.base;
+  if (base?.type !== 'MemberExpression') return null;
+  if (base.base?.type !== 'Identifier' || base.base.name !== 'mat4') return null;
   if (base.identifier?.type !== 'Identifier') return null;
 
   return {
