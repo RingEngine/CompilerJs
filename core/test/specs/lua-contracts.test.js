@@ -143,6 +143,27 @@ test('lintLuaScript errors on unknown ctx methods', () => {
   ));
 });
 
+test('lintLuaScript accepts clearOutput ctx method', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  ctx:clearOutput(ctx:getOutput(), { 0.1, 0.1, 0.12, 1.0 })',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'unknown_ctx_method'
+  ), false);
+});
+
 // Spec:
 // EN: https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_SRC.md?plain=1#L394-L400
 // ZH: https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_SRC.zh-CN.md?plain=1#L394-L400

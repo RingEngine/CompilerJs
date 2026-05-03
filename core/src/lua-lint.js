@@ -10,6 +10,7 @@ const CTX_METHODS = new Set([
   'createUIntBuffer',
   'getBuffer',
   'getOutput',
+  'clearOutput',
   'runRenderPass',
   'runComputePass'
 ]);
