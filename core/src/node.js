@@ -28,14 +28,18 @@ export async function compileFilterSourceDirectory(rootDirectory, options = {}) 
 
 /**
  * @param {string} rootDirectory
- * @param {{ sourceName?: string, compiler?: import('./index.js').ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} [options]
+ * @param {{ sourceName?: string, backend?: 'spirv'|'web-preview', compiler?: import('./index.js').ShaderCompiler, spirvVersion?: '1.0'|'1.1'|'1.2'|'1.3'|'1.4'|'1.5' }} [options]
  */
 export async function compileFilterSourceDirectoryWithDiagnostics(rootDirectory, options = {}) {
   const resolvedRootDirectory = resolveNodePath(rootDirectory);
   const files = readFilterSourceDirectory(resolvedRootDirectory);
-  const compiler = options.compiler ?? await createNodeShaderCompiler();
+  const backend = options.backend ?? 'spirv';
+  const compiler = backend === 'spirv'
+    ? options.compiler ?? await createNodeShaderCompiler()
+    : options.compiler;
   return await compileFilterSourceFilesWithDiagnostics(files, {
     sourceName: options.sourceName ?? path.basename(resolvedRootDirectory),
+    backend,
     compiler,
     spirvVersion: options.spirvVersion
   });
