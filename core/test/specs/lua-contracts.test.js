@@ -164,6 +164,70 @@ test('lintLuaScript accepts clearOutput ctx method', () => {
   ), false);
 });
 
+test('lintLuaScript warns on unknown literal parameter and asset lookups', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local exposure = ctx:getParam("exposure")',
+    '  local missingParam = ctx:getParam("missingParam")',
+    '  local logo = ctx:getAsset("logo")',
+    '  local missingAsset = ctx:getAsset("missingAsset")',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [
+      { id: 'exposure' }
+    ],
+    assets: [
+      { id: 'logo' }
+    ],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning'
+    && item.code === 'unknown_parameter_id'
+    && item.message.includes('missingParam')
+  ));
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning'
+    && item.code === 'unknown_asset_id'
+    && item.message.includes('missingAsset')
+  ));
+  assert.equal(diagnostics.some((item) =>
+    item.message.includes('exposure') || item.message.includes('logo')
+  ), false);
+});
+
+test('lintLuaScript does not validate dynamic parameter and asset lookups', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local id = getRuntimeId()',
+    '  local value = ctx:getParam(id)',
+    '  local asset = ctx:getAsset(id)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && (
+      item.code === 'unknown_parameter_id'
+      || item.code === 'unknown_asset_id'
+    )
+  ), false);
+});
+
 test('lintLuaScript accepts time runtime library calls', () => {
   const diagnostics = lintLuaScript([
     'function onReset(ctx)',

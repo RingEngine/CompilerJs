@@ -95,6 +95,8 @@ export function lintLuaScript(source, symbols) {
   const context = {
     diagnostics,
     outputSizeMode: symbols.outputSizeMode ?? 'passive',
+    parameterById: new Map((symbols.parameters ?? []).map((parameter) => [parameter.id, parameter])),
+    assetById: new Map((symbols.assets ?? []).map((asset) => [asset.id, asset])),
     passById: new Map(symbols.passes.map((pass) => [pass.id, pass])),
     entryFunctions: collectEntryFunctions(ast)
   };
@@ -272,6 +274,14 @@ function validateCtxCall(ctxCall, node, context) {
   if (method === 'runComputePass') {
     validateRunPass(node, context);
   }
+
+  if (method === 'getParam') {
+    validateNamedRuntimeLookup(node, context, 'parameter', context.parameterById, 'unknown_parameter_id');
+  }
+
+  if (method === 'getAsset') {
+    validateNamedRuntimeLookup(node, context, 'asset', context.assetById, 'unknown_asset_id');
+  }
 }
 
 function validateTimeCall(timeCall, node, context) {
@@ -343,6 +353,18 @@ function validateTimeFromDateLiteral(dateNode, context) {
       'warning'
     ));
   }
+}
+
+function validateNamedRuntimeLookup(node, context, label, knownById, code) {
+  const id = getStringLiteralValue(node.arguments?.[0]);
+  if (!id || knownById.has(id)) return;
+  context.diagnostics.push(luaDiagnostic(
+    code,
+    `Unknown ${label} id: ${id}`,
+    node.arguments?.[0]?.loc?.start?.line ?? node.loc?.start?.line,
+    node.arguments?.[0]?.loc?.start?.column ?? node.loc?.start?.column,
+    'warning'
+  ));
 }
 
 function validateRunPass(node, context) {
