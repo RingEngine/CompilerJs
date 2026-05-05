@@ -1,6 +1,6 @@
 {
   "name": "@ring-engine-org/filter-compiler-core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "description": "Ring Engine filter compiler core for compiling filter-src projects in Node.js and the browser.",
   "files": [
@@ -38,7 +38,8 @@
     "ajv": "^8.18.0",
     "antlr4": "^4.13.2",
     "json-source-map": "^0.6.1",
-    "luaparse": "^0.3.1"
+    "luaparse": "^0.3.1",
+    "naga-wasi-cli": "^0.1.0"
   },
   "devDependencies": {
     "antlr-ng": "^1.0.10"

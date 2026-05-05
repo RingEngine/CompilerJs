@@ -825,6 +825,11 @@ export const filterSchema = {
               "type": "integer",
               "minimum": 0
             },
+            "samplerBinding": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "WGSL/WebGPU-only sampler binding paired with this sampled image texture binding in the same descriptor set."
+            },
             "name": {
               "$ref": "#/$defs/id"
             },

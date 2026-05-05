@@ -4,7 +4,7 @@ import { COMPILER_RUNTIME_VERSION } from './compiler-config.js';
 import { parseGlslSourceInterface } from './glsl-binding-layout.js';
 import { lintLuaScript } from './lua-lint.js';
 import { parseManifestWithPointers, validateManifestAgainstSchema } from './manifest-schema.js';
-import { translateComputePassToWgsl, translateRenderPassToWgsl } from './wgsl-preview.js';
+import { translateSpirvToWgsl } from './naga-wgsl.js';
 
 const FILTER_SRC_REQUIRED_FILES = ['manifest.json', 'main.lua'];
 const COMPILED_BINDING_TYPES = new Set(['sampledImage', 'buffer', 'uniformBlock', 'uniform']);
@@ -110,11 +110,7 @@ export async function compileFilterSourceFilesWithDiagnostics(input, options) {
   if (backend !== 'spirv' && backend !== 'web-preview') {
     throw new Error(`Unsupported compiler backend: ${backend}`);
   }
-  if (backend === 'spirv' && (!options || !options.compiler)) {
-    throw new Error('compileFilterSourceFiles requires options.compiler for the spirv backend.');
-  }
-
-  const sourceName = options.sourceName ?? 'filter-src';
+  const sourceName = options?.sourceName ?? 'filter-src';
   const sourceFiles = normalizeMemoryFiles(input);
   const diagnostics = [];
 
@@ -144,6 +140,10 @@ export async function compileFilterSourceFilesWithDiagnostics(input, options) {
   }
 
   const normalizedManifest = normalizeSourceManifest(manifestRecord.manifest);
+  if ((backend === 'spirv' || backend === 'web-preview') && (!options || !options.compiler)) {
+    throw new Error(`compileFilterSourceFiles requires options.compiler for the ${backend} backend.`);
+  }
+
   let compiledResult;
   try {
     compiledResult = await buildCompiledFileMap(
@@ -553,10 +553,8 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
     files[buildAssetOutputPath(asset)] = cloneVirtualFileValue(sourceFile);
   }
 
-  if (backend === 'spirv') {
-    const compiledManifestDiagnostics = await validateCompiledManifestAgainstSchema(compiledManifest);
-    diagnostics.push(...compiledManifestDiagnostics);
-  }
+  const compiledManifestDiagnostics = await validateCompiledManifestAgainstSchema(compiledManifest);
+  diagnostics.push(...compiledManifestDiagnostics);
 
   files['manifest.json'] = JSON.stringify(compiledManifest, null, 2);
   return {
@@ -592,26 +590,33 @@ async function compilePass(pass, sourceFiles, backend, compiler, spirvVersion, s
     );
 
     if (backend === 'web-preview') {
+      const vertexWgsl = await translateSpirvToWgsl({
+        spirv: vertexArtifact.words,
+        stage: 'vertex',
+        bindings
+      });
+      const fragmentWgsl = await translateSpirvToWgsl({
+        spirv: fragmentArtifact.words,
+        stage: 'fragment',
+        bindings
+      });
+      const webGpuBindings = fragmentWgsl.bindings;
       const manifest = {
         id: pass.id,
         type: pass.type,
         stages: {
-          vertex: buildWebPreviewRenderOutputPath(pass),
-          fragment: buildWebPreviewRenderOutputPath(pass)
+          vertex: buildWebPreviewShaderOutputPath(vertexArtifact.sourcePath),
+          fragment: buildWebPreviewShaderOutputPath(fragmentArtifact.sourcePath)
         },
         vertexInput: vertexArtifact.reflection.entryPoint.inputVariables,
-        bindings
+        bindings: webGpuBindings
       };
-      const wgsl = translateRenderPassToWgsl({
-        pass: manifest,
-        vertexSource: vertexArtifact.source,
-        fragmentSource: fragmentArtifact.source,
-        vertexLineMap: vertexArtifact.sourceMap,
-        fragmentLineMap: fragmentArtifact.sourceMap
-      });
       return {
         manifest,
-        files: buildWgslFilesMap(manifest.stages.fragment, wgsl)
+        files: {
+          ...buildWgslFilesMap(manifest.stages.vertex, vertexWgsl),
+          ...buildWgslFilesMap(manifest.stages.fragment, fragmentWgsl)
+        }
       };
     }
 
@@ -641,6 +646,11 @@ async function compilePass(pass, sourceFiles, backend, compiler, spirvVersion, s
   );
 
   if (backend === 'web-preview') {
+    const wgsl = await translateSpirvToWgsl({
+      spirv: computeArtifact.words,
+      stage: 'compute',
+      bindings: computeArtifact.reflection.entryPoint.bindings
+    });
     const manifest = {
       id: pass.id,
       type: pass.type,
@@ -648,13 +658,8 @@ async function compilePass(pass, sourceFiles, backend, compiler, spirvVersion, s
         compute: buildWebPreviewComputeOutputPath(computeArtifact.sourcePath)
       },
       localSize: computeArtifact.reflection.entryPoint.localSize,
-      bindings: computeArtifact.reflection.entryPoint.bindings
+      bindings: wgsl.bindings
     };
-    const wgsl = translateComputePassToWgsl({
-      pass: manifest,
-      source: computeArtifact.source,
-      lineMap: computeArtifact.sourceMap
-    });
     return {
       manifest,
       files: buildWgslFilesMap(manifest.stages.compute, wgsl)
@@ -697,15 +702,13 @@ async function getOrBuildShaderArtifact(shaderPath, sourceFiles, backend, compil
   }
 
   const reflection = buildGlslReflection(interfaceInfo, stage, preprocessed.source);
-  const artifact = backend === 'web-preview'
-    ? buildWebPreviewShaderArtifact(shaderPath, preprocessed, stage, reflection)
-    : await buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection);
+  const artifact = await buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection, backend);
 
   shaderArtifacts.set(cacheKey, artifact);
   return artifact;
 }
 
-async function buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection) {
+async function buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stage, spirvVersion, reflection, backend = 'spirv') {
   let spirv;
   try {
     spirv = await compileShaderSource(compiler, preprocessed.source, stage, spirvVersion);
@@ -720,22 +723,12 @@ async function buildSpirvShaderArtifact(shaderPath, preprocessed, compiler, stag
     sourcePath: shaderPath,
     source: preprocessed.source,
     sourceMap: preprocessed.sourceMap,
-    outputPath: buildShaderOutputPath(shaderPath),
+    outputPath: backend === 'web-preview'
+      ? buildWebPreviewShaderOutputPath(shaderPath)
+      : buildShaderOutputPath(shaderPath),
     reflection,
+    words: spirv,
     bytes: wordsToBytes(spirv)
-  };
-}
-
-function buildWebPreviewShaderArtifact(shaderPath, preprocessed, stage, reflection) {
-  return {
-    stage,
-    sourcePath: shaderPath,
-    source: preprocessed.source,
-    sourceMap: preprocessed.sourceMap,
-    outputPath: buildWebPreviewShaderOutputPath(shaderPath),
-    reflection,
-    text: preprocessed.source,
-    mapText: JSON.stringify(preprocessed.sourceMap, null, 2)
   };
 }
 
@@ -762,11 +755,7 @@ function buildShaderOutputPath(shaderPath) {
 }
 
 function buildWebPreviewShaderOutputPath(shaderPath) {
-  return normalizeRelativePath(shaderPath);
-}
-
-function buildWebPreviewRenderOutputPath(pass) {
-  return normalizeRelativePath(`shaders/${pass.id}.wgsl`);
+  return normalizeRelativePath(shaderPath).replace(/\.glsl$/i, '.wgsl');
 }
 
 function buildWebPreviewComputeOutputPath(shaderPath) {

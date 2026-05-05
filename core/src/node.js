@@ -34,7 +34,7 @@ export async function compileFilterSourceDirectoryWithDiagnostics(rootDirectory,
   const resolvedRootDirectory = resolveNodePath(rootDirectory);
   const files = readFilterSourceDirectory(resolvedRootDirectory);
   const backend = options.backend ?? 'spirv';
-  const compiler = backend === 'spirv'
+  const compiler = backend === 'spirv' || backend === 'web-preview'
     ? options.compiler ?? await createNodeShaderCompiler()
     : options.compiler;
   return await compileFilterSourceFilesWithDiagnostics(files, {
