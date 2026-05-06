@@ -1,6 +1,6 @@
 {
   "name": "@ring-engine-org/filter-cli",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "type": "module",
   "description": "Ring Filter Compiler CLI for checking, compiling, packing, listing, and unpacking filter projects.",
   "files": [
@@ -28,7 +28,7 @@
   },
   "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/cli",
   "dependencies": {
-    "@ring-engine-org/filter-compiler-core": "0.1.9",
-    "@ring-engine-org/filter-packer": "0.1.9"
+    "@ring-engine-org/filter-compiler-core": "0.1.10",
+    "@ring-engine-org/filter-packer": "0.1.10"
   }
 }
