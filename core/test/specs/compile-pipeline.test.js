@@ -173,8 +173,10 @@ test('web-preview backend emits WGSL with line maps without SPIR-V', async () =>
   assert.equal(result.files['shaders/tone.frag.spv'], undefined);
   assert.equal(result.files['shaders/tone.frag.glsl'], undefined);
   assert.match(result.files['shaders/tone.frag.wgsl'], /fn sharedColor\(\) -> vec4<f32>/);
-  assert.match(result.files['shaders/tone.frag.wgsl'], /textureSample\(source_texture, source_sampler/);
+  assert.match(result.files['shaders/tone.frag.wgsl'], /textureSample\(source_texture, source_sampler,/);
+  assert.doesNotMatch(result.files['shaders/tone.frag.wgsl'], /ringSampleImage_source|1\.0 - uv\.y/);
   assert.match(result.files['shaders/fullscreen.vert.wgsl'], /@vertex/);
+  assert.match(result.files['shaders/fullscreen.vert.wgsl'], /\.gl_Position\.y\s*=\s*-\(/);
   assert.doesNotMatch(result.files['shaders/tone.frag.wgsl'], /#extension|#version/);
 
   const lineMap = JSON.parse(result.files['shaders/tone.frag.wgsl.map.json']);
@@ -243,7 +245,8 @@ test('web-preview backend lowers GLSL const declarations, atan2 calls, and terna
   const paramsBinding = manifest.passes[0].bindings.find((binding) => binding.name === 'params');
   assert.match(wgsl, /atan2/);
   assert.match(wgsl, /if \(_e\d+ < 0f\)/);
-  assert.match(wgsl, /textureSample\(source_texture, source_sampler/);
+  assert.match(wgsl, /textureSample\(source_texture, source_sampler,/);
+  assert.doesNotMatch(wgsl, /ringSampleImage_source|1\.0 - uv\.y/);
   assert.equal(sourceBinding.binding, 0);
   assert.equal(sourceBinding.samplerBinding, 2);
   assert.equal(paramsBinding.binding, 1);
@@ -465,7 +468,7 @@ test('web-preview backend emits WGSL storage buffer declarations', async () => {
   assert.match(result.files['shaders/histogram.comp.wgsl'], /histogram\.bins\[0i\] = 1u;/);
 });
 
-test('web-preview backend lowers compute texelFetch with y-up coordinates', async () => {
+test('web-preview backend preserves compute texelFetch texture coordinates', async () => {
   const project = createComputeProject({
     computeShader: [
       '#version 450',
@@ -485,6 +488,8 @@ test('web-preview backend lowers compute texelFetch with y-up coordinates', asyn
 
   const wgsl = result.files['shaders/histogram.comp.wgsl'];
   assert.match(wgsl, /textureLoad\(source_texture, _e\d+, 0i\)/);
+  assert.doesNotMatch(wgsl, /height - 1i - coord\.y/);
+  assert.doesNotMatch(wgsl, /ringLoadTexel_source/);
   assert.match(wgsl, /var source_texture: texture_2d<f32>;/);
   assert.match(wgsl, /var source_sampler: sampler;/);
 });

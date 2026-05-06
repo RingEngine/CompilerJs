@@ -86,7 +86,7 @@ function buildRenderWgsl(pass, varyings, vertexBody = '', helperCode = '', bodyC
     '  var out: VertexOut;',
     '  let pos = positions[vertexIndex];',
     ...varyings.map((varying) => `  var ${varying.vertexName}: ${toWgslType(varying.type)};`),
-    '  out.position = vec4<f32>(pos, 0.0, 1.0);',
+    '  out.position = vec4<f32>(pos.x, -pos.y, 0.0, 1.0);',
     ...buildDefaultVaryingInitializers(varyings)
   ]);
   builder.addMapped(vertexBody, '  ');
@@ -288,7 +288,7 @@ function translateRenderTextureFetchesMapped(source, sampledImages) {
       '  let width = u32(max(dims.x, 1));',
       '  let height = u32(max(dims.y, 1));',
       '  let x = min(u32(clamp(uv.x, 0.0, 1.0) * f32(max(width - 1u, 1u))), max(width - 1u, 0u));',
-      '  let y = min(u32(clamp(1.0 - uv.y, 0.0, 1.0) * f32(max(height - 1u, 1u))), max(height - 1u, 0u));',
+      '  let y = min(u32(clamp(uv.y, 0.0, 1.0) * f32(max(height - 1u, 1u))), max(height - 1u, 0u));',
       `  return textureLoad(${binding.name}, vec2<i32>(i32(x), i32(y)), 0);`,
       '}'
     ];
@@ -322,7 +322,7 @@ function translateTextureFetches(source, sampledImages) {
         '  let width = i32(max(dims.x, 1));',
         '  let height = i32(max(dims.y, 1));',
         '  let x = clamp(coord.x, 0, width - 1);',
-        '  let y = clamp(height - 1 - coord.y, 0, height - 1);',
+        '  let y = clamp(coord.y, 0, height - 1);',
         `  return textureLoad(${binding.name}, vec2<i32>(x, y), 0);`,
         '}',
         result

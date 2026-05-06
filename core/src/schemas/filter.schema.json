@@ -553,6 +553,7 @@
             "ndcPoint2",
             "ndcRect"
           ],
+          "description": "Additional semantic convention for selected parameter types. For ndcPoint2 and ndcRect, Ring NDC uses x to the right and y downward; [-1, -1] is the upper-left corner.",
           "x-description-zh-CN": "仅对特定类型生效的附加语义约定。当前用于 vec4。"
         },
         "default": {
@@ -622,22 +623,32 @@
             "properties": {
               "default": {
                 "type": "array",
+                "description": "`ndcRect` default as [x, y, w, h]. x and y are the upper-left corner in Ring NDC; w grows right and h grows downward.",
+                "x-description-zh-CN": "`ndcRect` 默认值，格式为 [x, y, w, h]。x 和 y 是 Ring NDC 中的左上角；w 向右增长，h 向下增长。",
                 "minItems": 4,
                 "maxItems": 4,
                 "prefixItems": [
                   {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Upper-left x in Ring NDC.",
+                    "x-description-zh-CN": "Ring NDC 中左上角的 x。"
                   },
                   {
                     "type": "number",
-                    "minimum": 0
+                    "description": "Upper-left y in Ring NDC.",
+                    "x-description-zh-CN": "Ring NDC 中左上角的 y。"
                   },
                   {
                     "type": "number",
-                    "minimum": 0
+                    "minimum": 0,
+                    "description": "Width in Ring NDC, growing toward positive x.",
+                    "x-description-zh-CN": "Ring NDC 中的宽度，向 x 正方向增长。"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Height in Ring NDC, growing downward toward positive y.",
+                    "x-description-zh-CN": "Ring NDC 中的高度，向下方的 y 正方向增长。"
                   }
                 ],
                 "items": false
