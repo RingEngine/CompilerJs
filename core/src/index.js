@@ -506,6 +506,9 @@ function normalizeSourceManifest(manifest) {
     schemaVersion: manifest.schemaVersion,
     runtimeVersion: manifest.runtimeVersion,
     outputSizeMode: manifest.outputSizeMode ?? 'passive',
+    runtimeHints: {
+      frameInvalidation: manifest.runtimeHints?.frameInvalidation ?? 'onChange'
+    },
     metadata: manifest.metadata ?? {},
     parameters: manifest.parameters ?? [],
     passes: manifest.passes ?? [],
@@ -525,6 +528,7 @@ async function buildCompiledFileMap(manifest, mainLuaText, sourceFiles, sourceNa
     sourceSchemaVersion: manifest.schemaVersion,
     runtimeVersion: manifest.runtimeVersion,
     outputSizeMode: manifest.outputSizeMode,
+    runtimeHints: manifest.runtimeHints,
     metadata: manifest.metadata,
     parameters: manifest.parameters,
     mainScript: 'main.lua',

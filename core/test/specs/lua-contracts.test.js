@@ -164,6 +164,53 @@ test('lintLuaScript accepts clearOutput ctx method', () => {
   ), false);
 });
 
+test('lintLuaScript accepts render timeline ctx methods', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  local frame = ctx:getFrameIndex()',
+    '  local t = ctx:getTimeSeconds()',
+    '  local dt = ctx:getDeltaSeconds()',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'error' && item.code === 'unknown_ctx_method'
+  ), false);
+  assert.equal(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ), false);
+});
+
+test('lintLuaScript warns on render timeline ctx method arguments', () => {
+  const diagnostics = lintLuaScript([
+    'function onReset(ctx)',
+    'end',
+    '',
+    'function advance(ctx)',
+    '  ctx:getTimeSeconds(1)',
+    'end',
+    ''
+  ].join('\n'), {
+    outputSizeMode: 'passive',
+    parameters: [],
+    assets: [],
+    passes: []
+  });
+
+  assert.ok(diagnostics.some((item) =>
+    item.severity === 'warning' && item.code === 'unexpected_argument_count'
+  ));
+});
+
 test('lintLuaScript warns on unknown literal parameter and asset lookups', () => {
   const diagnostics = lintLuaScript([
     'function onReset(ctx)',

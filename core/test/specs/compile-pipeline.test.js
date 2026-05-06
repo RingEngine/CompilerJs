@@ -124,6 +124,24 @@ test('compileFilterSourceFiles remains a virtual file map shortcut', async () =>
   assert.ok(files['shaders/fullscreen.vert.spv'] instanceof Uint8Array);
 });
 
+test('compileFilterSourceFiles preserves runtimeHints in compiled manifest', async () => {
+  const project = createRenderProject({
+    manifest: {
+      runtimeHints: {
+        frameInvalidation: 'continuous'
+      }
+    }
+  });
+  const compiler = await createNodeShaderCompiler();
+
+  const files = await compileFilterSourceFiles(project, { compiler });
+  const manifest = JSON.parse(String(files['manifest.json']));
+
+  assert.deepEqual(manifest.runtimeHints, {
+    frameInvalidation: 'continuous'
+  });
+});
+
 test('web-preview backend emits WGSL with line maps without SPIR-V', async () => {
   const project = createRenderProject({
     fragmentShader: [

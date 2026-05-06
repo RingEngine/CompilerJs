@@ -10,6 +10,9 @@ const CTX_METHODS = new Set([
   'createUIntBuffer',
   'getBuffer',
   'getOutput',
+  'getFrameIndex',
+  'getTimeSeconds',
+  'getDeltaSeconds',
   'clearOutput',
   'runRenderPass',
   'runComputePass'
@@ -281,6 +284,10 @@ function validateCtxCall(ctxCall, node, context) {
 
   if (method === 'getAsset') {
     validateNamedRuntimeLookup(node, context, 'asset', context.assetById, 'unknown_asset_id');
+  }
+
+  if (method === 'getFrameIndex' || method === 'getTimeSeconds' || method === 'getDeltaSeconds') {
+    validateArgumentCount(node, context, `ctx:${method}`, 0, 0);
   }
 }
 

@@ -59,6 +59,11 @@
       "description": "Output size decision mode.",
       "x-description-zh-CN": "输出尺寸决定模式。"
     },
+    "runtimeHints": {
+      "$ref": "#/$defs/runtimeHints",
+      "description": "Host-facing runtime behavior hints copied from source.",
+      "x-description-zh-CN": "从源工程复制而来的宿主侧 runtime 行为提示。"
+    },
     "metadata": {
       "type": "object",
       "description": "Optional descriptive metadata copied from source.",
@@ -104,6 +109,22 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:\\\\)(?!/).+$"
+    },
+    "runtimeHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frameInvalidation": {
+          "type": "string",
+          "enum": [
+            "onChange",
+            "continuous"
+          ],
+          "default": "onChange",
+          "description": "Host-facing hint for whether output may change as the render timeline advances without input or parameter changes.",
+          "x-description-zh-CN": "宿主侧提示：当输入和参数没有变化时，输出是否仍可能随渲染时间线推进而变化。"
+        }
+      }
     },
     "localSize": {
       "type": "object",

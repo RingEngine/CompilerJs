@@ -40,6 +40,10 @@ export const filterSrcSchema = {
       "description": "How this filter participates in output size decision.",
       "x-description-zh-CN": "当前 filter 参与最终输出尺寸决定的模式。缺省为 passive。"
     },
+    "runtimeHints": {
+      "$ref": "#/$defs/runtimeHints",
+      "x-description-zh-CN": "可选的宿主侧 runtime 行为提示。"
+    },
     "metadata": {
       "$ref": "#/$defs/metadata",
       "x-description-zh-CN": "可选的描述性工程元信息，不属于 runtime 核心执行契约。"
@@ -80,6 +84,22 @@ export const filterSrcSchema = {
     "projectRelativePath": {
       "type": "string",
       "pattern": "^(?![A-Za-z]:\\\\)(?!/).+$"
+    },
+    "runtimeHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frameInvalidation": {
+          "type": "string",
+          "enum": [
+            "onChange",
+            "continuous"
+          ],
+          "default": "onChange",
+          "description": "Host-facing hint for whether output may change as the render timeline advances without input or parameter changes.",
+          "x-description-zh-CN": "宿主侧提示：当输入和参数没有变化时，输出是否仍可能随渲染时间线推进而变化。"
+        }
+      }
     },
     "shaderPath": {
       "allOf": [
@@ -570,6 +590,11 @@ export const filterSchema = {
       "description": "Output size decision mode.",
       "x-description-zh-CN": "输出尺寸决定模式。"
     },
+    "runtimeHints": {
+      "$ref": "#/$defs/runtimeHints",
+      "description": "Host-facing runtime behavior hints copied from source.",
+      "x-description-zh-CN": "从源工程复制而来的宿主侧 runtime 行为提示。"
+    },
     "metadata": {
       "type": "object",
       "description": "Optional descriptive metadata copied from source.",
@@ -615,6 +640,22 @@ export const filterSchema = {
       "type": "string",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:\\\\)(?!/).+$"
+    },
+    "runtimeHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frameInvalidation": {
+          "type": "string",
+          "enum": [
+            "onChange",
+            "continuous"
+          ],
+          "default": "onChange",
+          "description": "Host-facing hint for whether output may change as the render timeline advances without input or parameter changes.",
+          "x-description-zh-CN": "宿主侧提示：当输入和参数没有变化时，输出是否仍可能随渲染时间线推进而变化。"
+        }
+      }
     },
     "localSize": {
       "type": "object",
