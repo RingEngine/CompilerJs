@@ -52,10 +52,17 @@ jobs:
             exit 1
           fi
 
-      - name: Validate tag format and package versions
+      - name: Validate tag format
         env:
           GIT_TAG: ${{ github.ref_name }}
         run: npm run release:validate-tag
+
+      - name: Set package versions from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION" --workspaces
+          npm pkg set "dependencies.@ring-engine-org/filter-compiler-core=$VERSION" --workspace cli
+          npm pkg set "dependencies.@ring-engine-org/filter-packer=$VERSION" --workspace cli
 
       - name: Run release checks
         run: npm run release:check

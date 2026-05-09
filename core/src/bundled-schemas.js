@@ -1,4 +1,4 @@
-// Generated from Docs schemas for runtime validation. Do not edit by hand.
+// Generated from docs schemas for runtime validation. Do not edit by hand.
 export const filterSrcSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ring.local/schemas/filter-src.schema.json",
