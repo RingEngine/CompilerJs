@@ -22,5 +22,8 @@
   "bugs": {
     "url": "https://github.com/RingEngine/CompilerJs/issues"
   },
-  "homepage": "https://github.com/RingEngine/CompilerJs#readme"
+  "homepage": "https://github.com/RingEngine/CompilerJs#readme",
+  "overrides": {
+    "fast-uri": "^3.1.2"
+  }
 }
