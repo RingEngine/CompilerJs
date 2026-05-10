@@ -17,12 +17,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RingEngine/CompilerJs"
+    "url": "https://github.com/RingEngine/compiler-js"
   },
   "bugs": {
-    "url": "https://github.com/RingEngine/CompilerJs/issues"
+    "url": "https://github.com/RingEngine/compiler-js/issues"
   },
-  "homepage": "https://github.com/RingEngine/CompilerJs#readme",
+  "homepage": "https://github.com/RingEngine/compiler-js#readme",
   "overrides": {
     "fast-uri": "^3.1.2"
   }

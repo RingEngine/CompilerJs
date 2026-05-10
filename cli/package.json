@@ -20,13 +20,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RingEngine/CompilerJs",
+    "url": "https://github.com/RingEngine/compiler-js",
     "directory": "cli"
   },
   "bugs": {
-    "url": "https://github.com/RingEngine/CompilerJs/issues"
+    "url": "https://github.com/RingEngine/compiler-js/issues"
   },
-  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/cli",
+  "homepage": "https://github.com/RingEngine/compiler-js/tree/master/cli",
   "dependencies": {
     "@ring-engine-org/filter-compiler-core": "0.0.0",
     "@ring-engine-org/filter-packer": "0.0.0"

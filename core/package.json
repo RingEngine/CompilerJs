@@ -28,13 +28,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RingEngine/CompilerJs",
+    "url": "https://github.com/RingEngine/compiler-js",
     "directory": "core"
   },
   "bugs": {
-    "url": "https://github.com/RingEngine/CompilerJs/issues"
+    "url": "https://github.com/RingEngine/compiler-js/issues"
   },
-  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/core",
+  "homepage": "https://github.com/RingEngine/compiler-js/tree/master/core",
   "dependencies": {
     "@webgpu/glslang": "^0.0.15",
     "ajv": "^8.18.0",

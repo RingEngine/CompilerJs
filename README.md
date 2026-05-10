@@ -119,8 +119,8 @@ GLSL block 布局规则：
 
 `packer` 当前执行的资源包格式标准是：
 
-- [FILTER_PACKAGE.md](https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_PACKAGE.md?plain=1)
-- [FILTER_PACKAGE.zh-CN.md](https://github.com/RingEngine/Docs/blob/runtime-1/FILTER_PACKAGE.zh-CN.md?plain=1)
+- [FILTER_PACKAGE.md](https://github.com/RingEngine/docs/blob/runtime-1/FILTER_PACKAGE.md?plain=1)
+- [FILTER_PACKAGE.zh-CN.md](https://github.com/RingEngine/docs/blob/runtime-1/FILTER_PACKAGE.zh-CN.md?plain=1)
 
 上面两份文档定义了 `packer` 当前遵循的正式资源包标准，包括：
 

@@ -20,13 +20,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RingEngine/CompilerJs",
+    "url": "https://github.com/RingEngine/compiler-js",
     "directory": "packer"
   },
   "bugs": {
-    "url": "https://github.com/RingEngine/CompilerJs/issues"
+    "url": "https://github.com/RingEngine/compiler-js/issues"
   },
-  "homepage": "https://github.com/RingEngine/CompilerJs/tree/master/packer",
+  "homepage": "https://github.com/RingEngine/compiler-js/tree/master/packer",
   "dependencies": {
     "pako": "^2.1.0"
   }
